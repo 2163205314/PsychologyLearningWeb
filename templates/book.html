@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}{{ book.title }} - 心理学考研学习平台{% endblock %}
+
+{% block sidebar %}
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <a href="{{ url_for('index') }}" class="back-link">← 返回首页</a>
+        <h2>{{ book.title }}</h2>
+        <div class="sidebar-search">
+            <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ book.id }}">
+        </div>
+    </div>
+    <nav class="toc-tree" id="toc-tree">
+        {% macro render_tree(nodes) %}
+        <ul>
+            {% for node in nodes %}
+            <li class="toc-item">
+                <div class="toc-node" data-section-id="{{ node.id }}">
+                    {% if node.children %}
+                    <span class="toc-toggle">▸</span>
+                    {% else %}
+                    <span class="toc-toggle toc-leaf"></span>
+                    {% endif %}
+                    <a href="{{ url_for('section_detail', section_id=node.id) }}" class="toc-link">
+                        {{ node.heading_text }}
+                    </a>
+                </div>
+                {% if node.children %}
+                <div class="toc-children" style="display:none;">
+                    {{ render_tree(node.children) }}
+                </div>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endmacro %}
+        {{ render_tree(tree) }}
+    </nav>
+</aside>
+{% endblock %}
+
+{% block content %}
+<div class="book-welcome">
+    <h1>{{ book.title }}</h1>
+    <p>请从左侧目录选择章节开始学习</p>
+</div>
+{% endblock %}

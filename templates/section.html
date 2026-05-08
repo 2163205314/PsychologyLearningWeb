@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ section.heading_text }} - {{ section.book_title }}{% endblock %}
+
+{% block sidebar %}
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <a href="{{ url_for('book_detail', book_id=section.book_id) }}" class="back-link">← {{ section.book_title }}</a>
+        <h2>{{ section.book_title }}</h2>
+    </div>
+    <nav class="toc-tree" id="toc-tree">
+        <div class="toc-loading">加载目录中...</div>
+    </nav>
+</aside>
+{% endblock %}
+
+{% block content %}
+<article class="section-content" data-section-id="{{ section.id }}" data-book-id="{{ section.book_id }}">
+    <div class="breadcrumb">
+        <a href="{{ url_for('index') }}">首页</a>
+        <span>›</span>
+        <a href="{{ url_for('book_detail', book_id=section.book_id) }}">{{ section.book_title }}</a>
+        {% for bc in section.breadcrumbs %}
+        <span>›</span>
+        <a href="{{ url_for('section_detail', section_id=bc.id) }}">{{ bc.heading_text }}</a>
+        {% endfor %}
+    </div>
+
+    <h1 class="section-title">{{ section.heading_text }}</h1>
+
+    <div class="section-body markdown-body" id="section-body">
+        {{ section.content }}
+    </div>
+
+    <div class="section-nav">
+        {% if section.prev_id %}
+        <a href="{{ url_for('section_detail', section_id=section.prev_id) }}" class="nav-btn nav-prev">
+            <span class="nav-label">上一节</span>
+            <span class="nav-title">{{ section.prev_title }}</span>
+        </a>
+        {% else %}
+        <span class="nav-btn nav-prev disabled"></span>
+        {% endif %}
+
+        {% if section.next_id %}
+        <a href="{{ url_for('section_detail', section_id=section.next_id) }}" class="nav-btn nav-next">
+            <span class="nav-label">下一节</span>
+            <span class="nav-title">{{ section.next_title }}</span>
+        </a>
+        {% else %}
+        <span class="nav-btn nav-next disabled"></span>
+        {% endif %}
+    </div>
+</article>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    window.SECTION_DATA = {
+        id: {{ section.id }},
+        bookId: {{ section.book_id }}
+    };
+</script>
+{% endblock %}

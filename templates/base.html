@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}心理学考研学习平台{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='js/lib/katex.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <header class="site-header">
+        <div class="header-inner">
+            <a href="{{ url_for('index') }}" class="logo">心理学考研学习平台</a>
+            <div class="header-search">
+                <input type="text" id="global-search" placeholder="搜索章节内容..." autocomplete="off">
+                <div id="search-results" class="search-dropdown"></div>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        {% block sidebar %}{% endblock %}
+        <main class="content-area">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/lib/marked.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/lib/katex.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/lib/auto-render.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/lib/chart.umd.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
