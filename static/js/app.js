@@ -215,6 +215,7 @@
         var isCollapsed = localStorage.getItem('nav-sidebar-collapsed') === 'true';
 
         function applyCollapsed(collapsed) {
+            if (window.innerWidth < 768) return;
             if (collapsed) {
                 sidebar.classList.add('collapsed');
                 if (contentArea) contentArea.style.marginLeft = '60px';
@@ -231,11 +232,64 @@
             localStorage.setItem('nav-sidebar-collapsed', isCollapsed);
             applyCollapsed(isCollapsed);
         });
+
+        window.addEventListener('resize', function () {
+            applyCollapsed(isCollapsed);
+        });
+    }
+
+    /* ===== 移动端侧边栏切换 ===== */
+    function initMobileSidebar() {
+        var hamburger = document.getElementById('hamburger-btn');
+        var overlay = document.getElementById('sidebar-overlay');
+        var sidebar = document.querySelector('.sidebar');
+        if (!hamburger || !overlay) return;
+
+        function openSidebar() {
+            if (!sidebar) return;
+            sidebar.classList.add('sidebar-open');
+            overlay.classList.add('active');
+            hamburger.classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeSidebar() {
+            if (!sidebar) return;
+            sidebar.classList.remove('sidebar-open');
+            overlay.classList.remove('active');
+            hamburger.classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        hamburger.addEventListener('click', function () {
+            if (sidebar && sidebar.classList.contains('sidebar-open')) {
+                closeSidebar();
+            } else {
+                openSidebar();
+            }
+        });
+
+        overlay.addEventListener('click', closeSidebar);
+
+        if (sidebar) {
+            sidebar.addEventListener('click', function (e) {
+                if (e.target.tagName === 'A') {
+                    closeSidebar();
+                }
+            });
+        }
+
+        window.addEventListener('resize', function () {
+            if (window.innerWidth >= 768) {
+                closeSidebar();
+            }
+        });
     }
 
     /* ===== 初始化 ===== */
     function init() {
         initNavSidebar();
+        initMobileSidebar();
         initTocTree();
         expandToActive();
         renderMarkdown();

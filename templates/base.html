@@ -11,7 +11,13 @@
 <body>
     <header class="site-header">
         <div class="header-inner">
+            <button class="hamburger-btn" id="hamburger-btn" aria-label="菜单">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
             <a href="{{ url_for('index') }}" class="logo">心理学考研学习平台</a>
+            <div class="header-spacer"></div>
         </div>
     </header>
 
@@ -21,6 +27,8 @@
             {% block content %}{% endblock %}
         </main>
     </div>
+
+    <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
     <script src="{{ url_for('static', filename='js/lib/marked.min.js') }}"></script>
     <script src="{{ url_for('static', filename='js/lib/katex.min.js') }}"></script>
