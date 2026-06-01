@@ -6,46 +6,6 @@
         gfm: true
     });
 
-    /* ===== 全局搜索 ===== */
-    var searchInput = document.getElementById('global-search');
-    var searchResults = document.getElementById('search-results');
-    var searchTimer = null;
-
-    if (searchInput) {
-        searchInput.addEventListener('input', function () {
-            clearTimeout(searchTimer);
-            var query = this.value.trim();
-            if (query.length < 2) {
-                searchResults.classList.remove('active');
-                searchResults.innerHTML = '';
-                return;
-            }
-            searchTimer = setTimeout(function () {
-                fetch('/api/search?q=' + encodeURIComponent(query))
-                    .then(function (r) { return r.json(); })
-                    .then(function (results) {
-                        if (results.length === 0) {
-                            searchResults.innerHTML = '<div class="search-result-item" style="color:#a0aec0;">未找到结果</div>';
-                        } else {
-                            searchResults.innerHTML = results.map(function (item) {
-                                return '<a href="/section/' + item.id + '" class="search-result-item">' +
-                                    '<div class="result-book">' + escapeHtml(item.book_title) + '</div>' +
-                                    '<div class="result-title">' + escapeHtml(item.heading_text) + '</div>' +
-                                    '</a>';
-                            }).join('');
-                        }
-                        searchResults.classList.add('active');
-                    });
-            }, 300);
-        });
-
-        document.addEventListener('click', function (e) {
-            if (!searchInput.contains(e.target) && !searchResults.contains(e.target)) {
-                searchResults.classList.remove('active');
-            }
-        });
-    }
-
     /* ===== 目录树折叠/展开 ===== */
     function initTocTree() {
         var toggles = document.querySelectorAll('.toc-toggle:not(.toc-leaf)');
@@ -120,25 +80,58 @@
 
     /* ===== 书本内搜索 ===== */
     var bookSearchInput = document.getElementById('book-search');
-    if (bookSearchInput) {
+    var bookSearchResults = document.getElementById('book-search-results');
+    var bookSearchTimer = null;
+
+    if (bookSearchInput && bookSearchResults) {
         var bookId = bookSearchInput.getAttribute('data-book-id');
+        
+        function updateDropdownPosition() {
+            var rect = bookSearchInput.getBoundingClientRect();
+            bookSearchResults.style.top = (rect.bottom + 4) + 'px';
+            bookSearchResults.style.left = rect.left + 'px';
+        }
+
+        bookSearchInput.addEventListener('focus', updateDropdownPosition);
+        window.addEventListener('resize', updateDropdownPosition);
+        document.querySelector('.sidebar').addEventListener('scroll', updateDropdownPosition);
+
         bookSearchInput.addEventListener('input', function () {
-            var query = this.value.trim().toLowerCase();
-            var items = document.querySelectorAll('.toc-item');
-            items.forEach(function (item) {
-                var link = item.querySelector('.toc-link');
-                if (!link) return;
-                var text = link.textContent.toLowerCase();
-                if (query.length < 1 || text.indexOf(query) !== -1) {
-                    item.style.display = '';
-                    if (query.length >= 1 && text.indexOf(query) !== -1) {
-                        var parents = item.querySelectorAll('.toc-children');
-                        parents.forEach(function (p) { p.style.display = 'block'; });
-                    }
-                } else {
-                    item.style.display = 'none';
+            clearTimeout(bookSearchTimer);
+            var query = this.value.trim();
+            if (query.length === 0) {
+                bookSearchResults.classList.remove('active');
+                bookSearchResults.innerHTML = '';
+                return;
+            }
+            bookSearchTimer = setTimeout(function () {
+                var url = '/api/search?q=' + encodeURIComponent(query);
+                if (bookId) {
+                    url += '&book_id=' + encodeURIComponent(bookId);
                 }
-            });
+                fetch(url)
+                    .then(function (r) { return r.json(); })
+                    .then(function (results) {
+                        if (results.length === 0) {
+                            bookSearchResults.classList.remove('active');
+                            bookSearchResults.innerHTML = '';
+                        } else {
+                            bookSearchResults.innerHTML = results.map(function (item) {
+                                return '<a href="/section/' + item.id + '?highlight=' + encodeURIComponent(query) + '" class="search-result-item">' +
+                                    '<div class="result-title">' + escapeHtml(item.heading_text) + '</div>' +
+                                    '<div class="result-snippet">' + escapeHtml(item.snippet) + '</div>' +
+                                    '</a>';
+                            }).join('');
+                            bookSearchResults.classList.add('active');
+                        }
+                    });
+            }, 300);
+        });
+
+        document.addEventListener('click', function (e) {
+            if (!bookSearchInput.contains(e.target) && !bookSearchResults.contains(e.target)) {
+                bookSearchResults.classList.remove('active');
+            }
         });
     }
 
@@ -166,6 +159,45 @@
         }
     }
 
+    /* ===== 搜索高亮 ===== */
+    function highlightSearchTerm() {
+        var params = new URLSearchParams(window.location.search);
+        var query = params.get('highlight');
+        if (!query) return;
+        
+        var body = document.getElementById('section-body');
+        if (!body) return;
+
+        var walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT, null, false);
+        var nodesToHighlight = [];
+        var node;
+        while (node = walker.nextNode()) {
+            // Skip text inside scripts or math formulas
+            var parent = node.parentNode;
+            if (parent && (parent.tagName === 'SCRIPT' || parent.closest('.katex') || parent.closest('.math'))) {
+                continue;
+            }
+            if (node.nodeValue.includes(query)) {
+                nodesToHighlight.push(node);
+            }
+        }
+
+        nodesToHighlight.forEach(function (n) {
+            var parts = n.nodeValue.split(query);
+            var frag = document.createDocumentFragment();
+            for (var i = 0; i < parts.length; i++) {
+                frag.appendChild(document.createTextNode(parts[i]));
+                if (i < parts.length - 1) {
+                    var mark = document.createElement('mark');
+                    mark.className = 'search-highlight';
+                    mark.textContent = query;
+                    frag.appendChild(mark);
+                }
+            }
+            n.parentNode.replaceChild(frag, n);
+        });
+    }
+
     /* ===== HTML转义 ===== */
     function escapeHtml(text) {
         var div = document.createElement('div');
@@ -173,11 +205,41 @@
         return div.innerHTML;
     }
 
+    /* ===== 首页导航栏收起/展开 ===== */
+    function initNavSidebar() {
+        var sidebar = document.getElementById('sidebar-nav');
+        var collapseBtn = document.getElementById('nav-collapse-btn');
+        var contentArea = document.querySelector('.content-area');
+        if (!sidebar || !collapseBtn) return;
+
+        var isCollapsed = localStorage.getItem('nav-sidebar-collapsed') === 'true';
+
+        function applyCollapsed(collapsed) {
+            if (collapsed) {
+                sidebar.classList.add('collapsed');
+                if (contentArea) contentArea.style.marginLeft = '60px';
+            } else {
+                sidebar.classList.remove('collapsed');
+                if (contentArea) contentArea.style.marginLeft = '';
+            }
+        }
+
+        applyCollapsed(isCollapsed);
+
+        collapseBtn.addEventListener('click', function () {
+            isCollapsed = !isCollapsed;
+            localStorage.setItem('nav-sidebar-collapsed', isCollapsed);
+            applyCollapsed(isCollapsed);
+        });
+    }
+
     /* ===== 初始化 ===== */
     function init() {
+        initNavSidebar();
         initTocTree();
         expandToActive();
         renderMarkdown();
+        highlightSearchTerm();
 
         var sectionData = window.SECTION_DATA;
         if (sectionData && sectionData.bookId) {

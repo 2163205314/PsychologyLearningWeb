@@ -6,6 +6,10 @@
     <div class="sidebar-header">
         <a href="{{ url_for('book_detail', book_id=section.book_id) }}" class="back-link">← {{ section.book_title }}</a>
         <h2>{{ section.book_title }}</h2>
+        <div class="sidebar-search">
+            <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ section.book_id }}" autocomplete="off">
+            <div id="book-search-results" class="search-dropdown"></div>
+        </div>
     </div>
     <nav class="toc-tree" id="toc-tree">
         <div class="toc-loading">加载目录中...</div>

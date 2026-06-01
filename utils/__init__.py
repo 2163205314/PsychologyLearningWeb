@@ -140,23 +140,53 @@ def search_sections(query, book_id=None):
 
     if book_id:
         c.execute('''
-            SELECT s.id, s.heading_text, s.heading_level, s.book_id, b.title as book_title, b.short_name as book_short_name
+            SELECT s.id, s.heading_text, s.heading_level, s.book_id, s.content, b.title as book_title, b.short_name as book_short_name
             FROM sections s
             JOIN books b ON s.book_id = b.id
             WHERE s.book_id = ? AND (s.heading_text LIKE ? OR s.content LIKE ?)
             ORDER BY s.sort_order
-            LIMIT 50
         ''', (book_id, f'%{query}%', f'%{query}%'))
     else:
         c.execute('''
-            SELECT s.id, s.heading_text, s.heading_level, s.book_id, b.title as book_title, b.short_name as book_short_name
+            SELECT s.id, s.heading_text, s.heading_level, s.book_id, s.content, b.title as book_title, b.short_name as book_short_name
             FROM sections s
             JOIN books b ON s.book_id = b.id
             WHERE s.heading_text LIKE ? OR s.content LIKE ?
             ORDER BY b.sort_order, s.sort_order
-            LIMIT 50
         ''', (f'%{query}%', f'%{query}%'))
 
-    results = [dict(row) for row in c.fetchall()]
+    rows = c.fetchall()
+    results = []
+    for row in rows:
+        content = row['content'] or ""
+        heading = row['heading_text'] or ""
+        
+        idx = content.find(query)
+        if idx != -1:
+            start = max(0, idx - 10)
+            end = min(len(content), idx + len(query) + 10)
+            snippet = content[start:end]
+            if start > 0:
+                snippet = "..." + snippet
+            if end < len(content):
+                snippet = snippet + "..."
+        else:
+            idx = heading.find(query)
+            if idx != -1:
+                start = max(0, idx - 10)
+                end = min(len(heading), idx + len(query) + 10)
+                snippet = heading[start:end]
+                if start > 0:
+                    snippet = "..." + snippet
+                if end < len(heading):
+                    snippet = snippet + "..."
+            else:
+                continue
+
+        res = dict(row)
+        res['snippet'] = snippet
+        del res['content']
+        results.append(res)
+
     conn.close()
     return results
