@@ -141,10 +141,19 @@
         if (!body) return;
 
         var raw = body.textContent || body.innerText || '';
+        raw = raw.trim();
 
         var html = marked.parse(raw);
 
         body.innerHTML = html;
+
+        var imgs = body.querySelectorAll('img');
+        imgs.forEach(function(img) {
+            var src = img.getAttribute('src');
+            if (src && src.indexOf('images/') === 0) {
+                img.setAttribute('src', '/' + src);
+            }
+        });
 
         if (typeof renderMathInElement !== 'undefined') {
             renderMathInElement(body, {
@@ -319,6 +328,17 @@
         });
     }
 
+    /* ===== 记住上次浏览位置 ===== */
+    function saveLastViewedSection() {
+        var sectionData = window.SECTION_DATA;
+        if (sectionData && sectionData.bookId && sectionData.id) {
+            try {
+                var key = 'last_section_' + sectionData.bookId;
+                localStorage.setItem(key, sectionData.id);
+            } catch (e) {}
+        }
+    }
+
     /* ===== 初始化 ===== */
     function init() {
         initNavSidebar();
@@ -328,6 +348,7 @@
         expandToActive();
         renderMarkdown();
         highlightSearchTerm();
+        saveLastViewedSection();
 
         var sectionData = window.SECTION_DATA;
         if (sectionData && sectionData.bookId) {

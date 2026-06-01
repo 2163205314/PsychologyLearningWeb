@@ -1,10 +1,18 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 from utils import (
     get_all_books, get_book, get_book_by_short_name,
     get_section_tree, get_section, search_sections
 )
+import os
 
 app = Flask(__name__)
+
+IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'img')
+
+
+@app.route('/images/<path:filename>')
+def serve_image(filename):
+    return send_from_directory(IMG_DIR, filename)
 
 
 @app.route('/')

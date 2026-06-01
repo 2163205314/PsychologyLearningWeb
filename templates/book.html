@@ -59,4 +59,16 @@
         <div class="card-footer"></div>
     </div>
 </div>
+
+<script>
+(function() {
+    try {
+        var key = 'last_section_' + {{ book.id }};
+        var lastSectionId = localStorage.getItem(key);
+        if (lastSectionId) {
+            window.location.replace('/section/' + lastSectionId);
+        }
+    } catch(e) {}
+})();
+</script>
 {% endblock %}
