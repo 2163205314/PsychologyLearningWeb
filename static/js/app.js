@@ -238,6 +238,39 @@
         });
     }
 
+    /* ===== 学习模块目录侧边栏收起/展开 ===== */
+    function initTocSidebar() {
+        var sidebar = document.getElementById('toc-sidebar');
+        var collapseBtn = document.getElementById('toc-collapse-btn');
+        var contentArea = document.querySelector('.content-area');
+        if (!sidebar || !collapseBtn) return;
+
+        var isCollapsed = localStorage.getItem('toc-sidebar-collapsed') === 'true';
+
+        function applyCollapsed(collapsed) {
+            if (window.innerWidth < 768) return;
+            if (collapsed) {
+                sidebar.classList.add('collapsed');
+                if (contentArea) contentArea.style.marginLeft = '60px';
+            } else {
+                sidebar.classList.remove('collapsed');
+                if (contentArea) contentArea.style.marginLeft = '';
+            }
+        }
+
+        applyCollapsed(isCollapsed);
+
+        collapseBtn.addEventListener('click', function () {
+            isCollapsed = !isCollapsed;
+            localStorage.setItem('toc-sidebar-collapsed', isCollapsed);
+            applyCollapsed(isCollapsed);
+        });
+
+        window.addEventListener('resize', function () {
+            applyCollapsed(isCollapsed);
+        });
+    }
+
     /* ===== 移动端侧边栏切换 ===== */
     function initMobileSidebar() {
         var hamburger = document.getElementById('hamburger-btn');
@@ -289,6 +322,7 @@
     /* ===== 初始化 ===== */
     function init() {
         initNavSidebar();
+        initTocSidebar();
         initMobileSidebar();
         initTocTree();
         expandToActive();

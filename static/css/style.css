@@ -208,10 +208,71 @@ body {
     z-index: 10;
 }
 
+.sidebar-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.toc-collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.toc-collapse-btn:hover {
+    background: var(--primary-light);
+    color: var(--primary);
+    border-color: var(--primary);
+}
+
 .sidebar-header h2 {
     font-size: 16px;
     margin-top: 4px;
     color: var(--text);
+}
+
+/* TOC sidebar collapsed state */
+.sidebar.collapsed {
+    width: 60px;
+}
+
+.sidebar.collapsed .sidebar-header {
+    padding: 12px 8px;
+    border-bottom: none;
+}
+
+.sidebar.collapsed .sidebar-header-top {
+    justify-content: center;
+}
+
+.sidebar.collapsed .sidebar-header-top .back-link {
+    display: none;
+}
+
+.sidebar.collapsed .toc-collapse-btn svg {
+    transform: rotate(180deg);
+}
+
+.sidebar.collapsed .sidebar-header h2 {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-search {
+    display: none;
+}
+
+.sidebar.collapsed .toc-tree {
+    display: none;
 }
 
 .back-link {
@@ -893,6 +954,10 @@ body {
     .nav-collapse-btn {
         display: none;
     }
+
+    .toc-collapse-btn {
+        display: none;
+    }
 }
 
 /* Mobile: < 768px */
@@ -970,6 +1035,39 @@ body {
 
     .sidebar-nav.collapsed .nav-collapse-btn svg {
         transform: none;
+    }
+
+    .sidebar.collapsed {
+        width: var(--sidebar-width);
+    }
+
+    .sidebar.collapsed .sidebar-header {
+        padding: 16px;
+        border-bottom: 1px solid var(--border-light);
+    }
+
+    .sidebar.collapsed .sidebar-header-top {
+        justify-content: space-between;
+    }
+
+    .sidebar.collapsed .sidebar-header-top .back-link {
+        display: inline;
+    }
+
+    .sidebar.collapsed .toc-collapse-btn svg {
+        transform: none;
+    }
+
+    .sidebar.collapsed .sidebar-header h2 {
+        display: block;
+    }
+
+    .sidebar.collapsed .sidebar-search {
+        display: block;
+    }
+
+    .sidebar.collapsed .toc-tree {
+        display: block;
     }
 
     .nav-collapse-btn {

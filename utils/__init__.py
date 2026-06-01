@@ -92,26 +92,55 @@ def get_section(section_id):
     section = dict(row)
 
     c.execute('''
-        SELECT id, heading_text, heading_level
+        SELECT id, parent_id, heading_text, heading_level, sort_order
         FROM sections
-        WHERE book_id = ? AND sort_order < ?
-        ORDER BY sort_order DESC
-        LIMIT 1
-    ''', (section['book_id'], section['sort_order']))
-    prev_row = c.fetchone()
-    section['prev_id'] = prev_row['id'] if prev_row else None
-    section['prev_title'] = prev_row['heading_text'] if prev_row else None
+        WHERE book_id = ?
+        ORDER BY sort_order
+    ''', (section['book_id'],))
+    all_rows = [dict(r) for r in c.fetchall()]
 
-    c.execute('''
-        SELECT id, heading_text, heading_level
-        FROM sections
-        WHERE book_id = ? AND sort_order > ?
-        ORDER BY sort_order ASC
-        LIMIT 1
-    ''', (section['book_id'], section['sort_order']))
-    next_row = c.fetchone()
-    section['next_id'] = next_row['id'] if next_row else None
-    section['next_title'] = next_row['heading_text'] if next_row else None
+    children_map = {}
+    for r in all_rows:
+        pid = r['parent_id']
+        if pid not in children_map:
+            children_map[pid] = []
+        children_map[pid].append(r)
+
+    reading_order = []
+
+    def traverse(node_id):
+        reading_order.append(node_id)
+        for child in children_map.get(node_id, []):
+            traverse(child['id'])
+
+    root_ids = [r['id'] for r in all_rows if r['parent_id'] is None]
+    for root_id in root_ids:
+        traverse(root_id)
+
+    try:
+        idx = reading_order.index(section_id)
+    except ValueError:
+        idx = -1
+
+    if idx > 0:
+        prev_id = reading_order[idx - 1]
+        c.execute('SELECT heading_text FROM sections WHERE id = ?', (prev_id,))
+        prev_row = c.fetchone()
+        section['prev_id'] = prev_id
+        section['prev_title'] = prev_row['heading_text'] if prev_row else None
+    else:
+        section['prev_id'] = None
+        section['prev_title'] = None
+
+    if idx >= 0 and idx < len(reading_order) - 1:
+        next_id = reading_order[idx + 1]
+        c.execute('SELECT heading_text FROM sections WHERE id = ?', (next_id,))
+        next_row = c.fetchone()
+        section['next_id'] = next_id
+        section['next_title'] = next_row['heading_text'] if next_row else None
+    else:
+        section['next_id'] = None
+        section['next_title'] = None
 
     breadcrumbs = []
     current_parent_id = section['parent_id']

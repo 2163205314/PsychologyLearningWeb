@@ -2,9 +2,14 @@
 {% block title %}{{ section.heading_text }} - {{ section.book_title }}{% endblock %}
 
 {% block sidebar %}
-<aside class="sidebar">
+<aside class="sidebar" id="toc-sidebar">
     <div class="sidebar-header">
-        <a href="{{ url_for('book_detail', book_id=section.book_id) }}" class="back-link">← {{ section.book_title }}</a>
+        <div class="sidebar-header-top">
+            <a href="{{ url_for('book_detail', book_id=section.book_id) }}" class="back-link">← {{ section.book_title }}</a>
+            <button class="toc-collapse-btn" id="toc-collapse-btn" title="收起导航">
+                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+        </div>
         <h2>{{ section.book_title }}</h2>
         <div class="sidebar-search">
             <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ section.book_id }}" autocomplete="off">
