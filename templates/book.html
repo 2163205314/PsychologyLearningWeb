@@ -46,8 +46,17 @@
 {% endblock %}
 
 {% block content %}
-<div class="book-welcome">
-    <h1>{{ book.title }}</h1>
-    <p>请从左侧目录选择章节开始学习</p>
+<div class="section-content">
+    <div class="section-card">
+        <div class="card-header">
+            <h1 class="section-title">{{ book.title }}</h1>
+        </div>
+        <div class="card-body">
+            <div class="book-welcome">
+                <p>请从左侧目录选择章节开始学习</p>
+            </div>
+        </div>
+        <div class="card-footer"></div>
+    </div>
 </div>
 {% endblock %}
