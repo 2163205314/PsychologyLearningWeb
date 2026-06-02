@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, send_from_directory
+from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory
 from utils import (
     get_all_books, get_book, get_book_by_short_name,
     get_section_tree, get_section, search_sections
@@ -44,6 +44,11 @@ def section_detail(section_id):
     section = get_section(section_id)
     if not section:
         return render_template('404.html'), 404
+    if 'redirect_to' in section:
+        kwargs = {'section_id': section['redirect_to'], '_anchor': 'section-' + str(section['anchor'])}
+        if request.args.get('highlight'):
+            kwargs['highlight'] = request.args.get('highlight')
+        return redirect(url_for('section_detail', **kwargs))
     return render_template('section.html', section=section)
 
 

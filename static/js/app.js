@@ -43,7 +43,8 @@
         fetch('/api/book/' + bookId + '/tree')
             .then(function (r) { return r.json(); })
             .then(function (tree) {
-                tocTree.innerHTML = buildTocHtml(tree, sectionId);
+                var pageUnitLevel = getPageUnitLevel(tree);
+                tocTree.innerHTML = buildTocHtml(tree, sectionId, null, pageUnitLevel);
                 initTocTree();
                 expandToActive();
             })
@@ -52,12 +53,55 @@
             });
     }
 
-    function buildTocHtml(nodes, activeSectionId) {
+    function getPageUnitLevel(nodes) {
+        var sectionPattern = /^第[一二三四五六七八九十\d]+节/;
+        var levelCounts = {};
+        function walk(nodes) {
+            nodes.forEach(function (node) {
+                if (sectionPattern.test(node.heading_text)) {
+                    levelCounts[node.heading_level] = (levelCounts[node.heading_level] || 0) + 1;
+                }
+                if (node.children && node.children.length > 0) {
+                    walk(node.children);
+                }
+            });
+        }
+        walk(nodes);
+        if (Object.keys(levelCounts).length === 0) {
+            var max = 0;
+            walk = function(nodes) {
+                nodes.forEach(function (n) {
+                    if (n.heading_level > max) max = n.heading_level;
+                    if (n.children) walk(n.children);
+                });
+            };
+            walk(nodes);
+            return max > 1 ? max - 1 : max;
+        }
+        var bestLevel = 1;
+        var bestCount = 0;
+        for (var lvl in levelCounts) {
+            if (levelCounts[lvl] > bestCount) {
+                bestCount = levelCounts[lvl];
+                bestLevel = parseInt(lvl);
+            }
+        }
+        return bestLevel;
+    }
+
+    function buildTocHtml(nodes, activeSectionId, parentNode, pageUnitLevel) {
         if (!nodes || nodes.length === 0) return '';
         var html = '<ul>';
         nodes.forEach(function (node) {
             var hasChildren = node.children && node.children.length > 0;
             var isActive = node.id === activeSectionId;
+            var linkTarget = '/section/' + node.id;
+            var isPageUnit = node.heading_level === pageUnitLevel;
+            var pageUnitAncestor = isPageUnit ? node : (parentNode || null);
+
+            if (node.heading_level > pageUnitLevel && pageUnitAncestor) {
+                linkTarget = '/section/' + pageUnitAncestor.id + '#section-' + node.id;
+            }
             html += '<li class="toc-item">';
             html += '<div class="toc-node' + (isActive ? ' active' : '') + '" data-section-id="' + node.id + '">';
             if (hasChildren) {
@@ -65,11 +109,11 @@
             } else {
                 html += '<span class="toc-toggle toc-leaf"></span>';
             }
-            html += '<a href="/section/' + node.id + '" class="toc-link">' + escapeHtml(node.heading_text) + '</a>';
+            html += '<a href="' + linkTarget + '" class="toc-link">' + escapeHtml(node.heading_text) + '</a>';
             html += '</div>';
             if (hasChildren) {
                 html += '<div class="toc-children" style="display:none;">';
-                html += buildTocHtml(node.children, activeSectionId);
+                html += buildTocHtml(node.children, activeSectionId, pageUnitAncestor, pageUnitLevel);
                 html += '</div>';
             }
             html += '</li>';
@@ -94,7 +138,6 @@
 
         bookSearchInput.addEventListener('focus', updateDropdownPosition);
         window.addEventListener('resize', updateDropdownPosition);
-        document.querySelector('.sidebar').addEventListener('scroll', updateDropdownPosition);
 
         bookSearchInput.addEventListener('input', function () {
             clearTimeout(bookSearchTimer);
@@ -117,7 +160,8 @@
                             bookSearchResults.innerHTML = '';
                         } else {
                             bookSearchResults.innerHTML = results.map(function (item) {
-                                return '<a href="/section/' + item.id + '?highlight=' + encodeURIComponent(query) + '" class="search-result-item">' +
+                                var link = '/section/' + item.id;
+                                return '<a href="' + link + '?highlight=' + encodeURIComponent(query) + '" class="search-result-item">' +
                                     '<div class="result-title">' + escapeHtml(item.heading_text) + '</div>' +
                                     '<div class="result-snippet">' + escapeHtml(item.snippet) + '</div>' +
                                     '</a>';
@@ -135,16 +179,36 @@
         });
     }
 
+    /* ===== 选项卡切换 ===== */
+    function initTabs() {
+        var tabBtns = document.querySelectorAll('.tab-btn');
+        if (tabBtns.length === 0) return;
+
+        tabBtns.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                tabBtns.forEach(function(b) { b.classList.remove('active'); });
+                this.classList.add('active');
+
+                var tab = this.getAttribute('data-tab');
+                var body = document.getElementById('section-body');
+                if (!body) return;
+
+                if (tab === 'content') {
+                    body.style.display = '';
+                } else {
+                    body.style.display = 'none';
+                }
+            });
+        });
+    }
+
     /* ===== Markdown渲染 + KaTeX ===== */
     function renderMarkdown() {
         var body = document.getElementById('section-body');
         if (!body) return;
 
-        var raw = body.textContent || body.innerText || '';
-        raw = raw.trim();
-
+        var raw = body.innerHTML.trim();
         var html = marked.parse(raw);
-
         body.innerHTML = html;
 
         var imgs = body.querySelectorAll('img');
@@ -347,14 +411,67 @@
         initTocTree();
         expandToActive();
         renderMarkdown();
+        initTabs();
         highlightSearchTerm();
         saveLastViewedSection();
+        handleAnchorScroll();
 
         var sectionData = window.SECTION_DATA;
         if (sectionData && sectionData.bookId) {
             loadTocViaApi(sectionData.bookId, sectionData.id);
         }
     }
+
+
+    window.addEventListener('scroll', function () {
+        if (document.documentElement.scrollTop !== 0) {
+            document.documentElement.scrollTop = 0;
+        }
+        if (document.body.scrollTop !== 0) {
+            document.body.scrollTop = 0;
+        }
+    }, { passive: false });
+
+    function handleAnchorScroll() {
+        var hash = window.location.hash;
+        if (!hash) return;
+
+        resetAllScrollPositions();
+
+        var attempts = 0;
+        var maxAttempts = 20;
+        function tryScroll() {
+            var target = document.querySelector(hash);
+            if (target) {
+                var cardBody = target.closest('.card-body');
+                if (cardBody) {
+                    resetAllScrollPositions();
+                    cardBody.scrollTop = 0;
+                    var targetRect = target.getBoundingClientRect();
+                    var bodyRect = cardBody.getBoundingClientRect();
+                    var targetTop = targetRect.top - bodyRect.top;
+                    cardBody.scrollTop = targetTop - 20;
+                }
+                return;
+            }
+            attempts++;
+            if (attempts < maxAttempts) {
+                requestAnimationFrame(tryScroll);
+            }
+        }
+        requestAnimationFrame(tryScroll);
+    }
+
+    function resetAllScrollPositions() {
+        document.documentElement.scrollTop = 0;
+        document.body.scrollTop = 0;
+        var containers = document.querySelectorAll('.main-container, .content-area, .section-content');
+        containers.forEach(function (el) { el.scrollTop = 0; });
+    }
+
+    window.addEventListener('hashchange', function () {
+        handleAnchorScroll();
+    });
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

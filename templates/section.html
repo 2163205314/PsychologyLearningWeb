@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ section.heading_text }} - {{ section.book_title }}{% endblock %}
 
+{% block header_search %}
+<div class="header-search">
+    <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ section.book_id }}" autocomplete="off">
+    <div id="book-search-results" class="search-dropdown"></div>
+</div>
+{% endblock %}
+
 {% block sidebar %}
 <aside class="sidebar" id="toc-sidebar">
     <div class="sidebar-header">
@@ -11,10 +18,6 @@
             </button>
         </div>
         <h2>{{ section.book_title }}</h2>
-        <div class="sidebar-search">
-            <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ section.book_id }}" autocomplete="off">
-            <div id="book-search-results" class="search-dropdown"></div>
-        </div>
     </div>
     <nav class="toc-tree" id="toc-tree">
         <div class="toc-loading">加载目录中...</div>
@@ -27,39 +30,40 @@
     <div class="section-card">
         <div class="card-header">
             <div class="breadcrumb">
-                <a href="{{ url_for('index') }}">首页</a>
-                <span>›</span>
-                <a href="{{ url_for('book_detail', book_id=section.book_id) }}">{{ section.book_title }}</a>
-                {% for bc in section.breadcrumbs %}
-                <span>›</span>
-                <a href="{{ url_for('section_detail', section_id=bc.id) }}">{{ bc.heading_text }}</a>
-                {% endfor %}
+                <div class="breadcrumb-path">
+                    <a href="{{ url_for('index') }}">首页</a>
+                    <span>›</span>
+                    <a href="{{ url_for('book_detail', book_id=section.book_id) }}">{{ section.book_title }}</a>
+                    {% for bc in section.breadcrumbs %}
+                    <span>›</span>
+                    <a href="{{ url_for('section_detail', section_id=bc.id) }}">{{ bc.heading_text }}</a>
+                    {% endfor %}
+                </div>
+                <span class="breadcrumb-title">{{ section.heading_text }}</span>
             </div>
-            <h1 class="section-title">{{ section.heading_text }}</h1>
+            <div class="section-tabs">
+                <button class="tab-btn" data-tab="keypoints">考点</button>
+                <button class="tab-btn" data-tab="exercises">习题</button>
+                <button class="tab-btn active" data-tab="content">原文</button>
+            </div>
         </div>
 
         <div class="card-body">
             <div class="section-body markdown-body" id="section-body">
-{{- section.content -}}
+{{- section.content | safe -}}
             </div>
         </div>
 
         <div class="card-footer">
             <div class="section-nav">
                 {% if section.prev_id %}
-                <a href="{{ url_for('section_detail', section_id=section.prev_id) }}" class="nav-btn nav-prev">
-                    <span class="nav-label">上一节</span>
-                    <span class="nav-title">{{ section.prev_title }}</span>
-                </a>
+                <a href="{{ url_for('section_detail', section_id=section.prev_id) }}" class="nav-btn nav-prev">← 上一节</a>
                 {% else %}
                 <span class="nav-btn nav-prev disabled"></span>
                 {% endif %}
 
                 {% if section.next_id %}
-                <a href="{{ url_for('section_detail', section_id=section.next_id) }}" class="nav-btn nav-next">
-                    <span class="nav-label">下一节</span>
-                    <span class="nav-title">{{ section.next_title }}</span>
-                </a>
+                <a href="{{ url_for('section_detail', section_id=section.next_id) }}" class="nav-btn nav-next">下一节 →</a>
                 {% else %}
                 <span class="nav-btn nav-next disabled"></span>
                 {% endif %}

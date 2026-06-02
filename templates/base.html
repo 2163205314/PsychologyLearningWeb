@@ -17,7 +17,7 @@
                 <span></span>
             </button>
             <a href="{{ url_for('index') }}" class="logo">心理学考研学习平台</a>
-            <div class="header-spacer"></div>
+            {% block header_search %}{% endblock %}
         </div>
     </header>
 

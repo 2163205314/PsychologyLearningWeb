@@ -1,6 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ book.title }} - 心理学考研学习平台{% endblock %}
 
+{% block header_search %}
+<div class="header-search">
+    <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ book.id }}" autocomplete="off">
+    <div id="book-search-results" class="search-dropdown"></div>
+</div>
+{% endblock %}
+
 {% block sidebar %}
 <aside class="sidebar" id="toc-sidebar">
     <div class="sidebar-header">
@@ -11,10 +18,6 @@
             </button>
         </div>
         <h2>{{ book.title }}</h2>
-        <div class="sidebar-search">
-            <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ book.id }}" autocomplete="off">
-            <div id="book-search-results" class="search-dropdown"></div>
-        </div>
     </div>
     <nav class="toc-tree" id="toc-tree">
         {% macro render_tree(nodes) %}
