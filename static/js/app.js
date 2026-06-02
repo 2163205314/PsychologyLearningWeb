@@ -412,6 +412,7 @@
         expandToActive();
         renderMarkdown();
         initTabs();
+        initEditMode();
         highlightSearchTerm();
         saveLastViewedSection();
         handleAnchorScroll();
@@ -419,6 +420,259 @@
         var sectionData = window.SECTION_DATA;
         if (sectionData && sectionData.bookId) {
             loadTocViaApi(sectionData.bookId, sectionData.id);
+        }
+    }
+
+    /* ===== 编辑模式 ===== */
+    var isEditMode = false;
+    var originalHtml = '';
+    var originalMarkdown = '';
+
+    function htmlToMarkdown(node) {
+        if (!node) return '';
+
+        function processNode(n) {
+            if (n.nodeType === Node.TEXT_NODE) {
+                return n.textContent.replace(/\n/g, ' ').trim();
+            }
+
+            if (n.nodeType !== Node.ELEMENT_NODE) return '';
+
+            var tag = n.tagName.toLowerCase();
+
+            if (tag === 'h1') return '# ' + getText(n) + '\n\n';
+            if (tag === 'h2') return '## ' + getText(n) + '\n\n';
+            if (tag === 'h3') return '### ' + getText(n) + '\n\n';
+            if (tag === 'h4') return '#### ' + getText(n) + '\n\n';
+            if (tag === 'h5') return '##### ' + getText(n) + '\n\n';
+            if (tag === 'h6') return '###### ' + getText(n) + '\n\n';
+            if (tag === 'p') {
+                var content = processChildren(n);
+                return content.trim() ? content.trim() + '\n\n' : '';
+            }
+            if (tag === 'ul') {
+                var result = '';
+                n.querySelectorAll('li').forEach(function (li) {
+                    result += '- ' + processChildren(li).trim() + '\n';
+                });
+                return result + '\n';
+            }
+            if (tag === 'ol') {
+                var result = '';
+                var idx = 1;
+                n.querySelectorAll('li').forEach(function (li) {
+                    result += idx + '. ' + processChildren(li).trim() + '\n';
+                    idx++;
+                });
+                return result + '\n';
+            }
+            if (tag === 'li') return processChildren(n);
+            if (tag === 'strong' || tag === 'b') return '**' + processChildren(n) + '**';
+            if (tag === 'em' || tag === 'i') return '*' + processChildren(n) + '*';
+            if (tag === 'code') return '`' + processChildren(n) + '`';
+            if (tag === 'pre') return '\n```\n' + getText(n) + '\n```\n\n';
+            if (tag === 'blockquote') return '> ' + processChildren(n).trim().replace(/\n/g, '\n> ') + '\n\n';
+            if (tag === 'a') {
+                var href = n.getAttribute('href') || '';
+                var text = processChildren(n);
+                return '[' + text + '](' + href + ')';
+            }
+            if (tag === 'img') {
+                var src = n.getAttribute('src') || '';
+                var alt = n.getAttribute('alt') || '';
+                return '![' + alt + '](' + src + ')\n\n';
+            }
+            if (tag === 'br') return '\n';
+            if (tag === 'hr') return '---\n\n';
+            if (tag === 'div' || tag === 'span' || tag === 'a' || tag === 'code') {
+                return processChildren(n);
+            }
+
+            return processChildren(n);
+        }
+
+        function processChildren(parent) {
+            var result = '';
+            parent.childNodes.forEach(function (child) {
+                result += processNode(child);
+            });
+            return result;
+        }
+
+        function getText(el) {
+            return el.textContent.trim();
+        }
+
+        return processNode(node).replace(/\n{3,}/g, '\n\n').trim();
+    }
+
+    function createHeadingToolbar(heading) {
+        var toolbar = document.createElement('span');
+        toolbar.className = 'heading-toolbar';
+        toolbar.contentEditable = 'false';
+
+        var level = parseInt(heading.tagName[1], 10);
+
+        var upBtn = document.createElement('button');
+        upBtn.innerHTML = '↑';
+        upBtn.title = '升级标题';
+        upBtn.disabled = level <= 1;
+        upBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (level > 1) {
+                changeHeadingLevel(heading, level - 1);
+            }
+        });
+
+        var downBtn = document.createElement('button');
+        downBtn.innerHTML = '↓';
+        downBtn.title = '降级标题';
+        downBtn.disabled = level >= 6;
+        downBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            if (level < 6) {
+                changeHeadingLevel(heading, level + 1);
+            }
+        });
+
+        toolbar.appendChild(upBtn);
+        toolbar.appendChild(downBtn);
+
+        heading.insertBefore(toolbar, heading.firstChild);
+    }
+
+    function changeHeadingLevel(heading, newLevel) {
+        var content = heading.innerHTML;
+        var newHeading = document.createElement('h' + newLevel);
+        newHeading.innerHTML = content;
+        heading.parentNode.replaceChild(newHeading, heading);
+    }
+
+    function addHeadingToolbars() {
+        var sectionBody = document.getElementById('section-body');
+        var headings = sectionBody.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headings.forEach(function (heading) {
+            if (!heading.querySelector('.heading-toolbar')) {
+                createHeadingToolbar(heading);
+            }
+        });
+    }
+
+    function removeHeadingToolbars() {
+        var sectionBody = document.getElementById('section-body');
+        var toolbars = sectionBody.querySelectorAll('.heading-toolbar');
+        toolbars.forEach(function (tb) { tb.remove(); });
+    }
+
+    function initEditMode() {
+        var editBtn = document.getElementById('edit-btn');
+        var saveBtn = document.getElementById('save-btn');
+        var cancelBtn = document.getElementById('cancel-btn');
+        var editActions = document.getElementById('edit-actions');
+        var sectionBody = document.getElementById('section-body');
+
+        if (!editBtn || !sectionBody) return;
+
+        editBtn.addEventListener('click', function () {
+            enterEditMode();
+        });
+
+        saveBtn.addEventListener('click', function () {
+            saveEdit();
+        });
+
+        cancelBtn.addEventListener('click', function () {
+            cancelEdit();
+        });
+    }
+
+    function enterEditMode() {
+        if (isEditMode) return;
+
+        var sectionBody = document.getElementById('section-body');
+        var editBtn = document.getElementById('edit-btn');
+        var editActions = document.getElementById('edit-actions');
+        var tabBtns = document.querySelectorAll('.tab-btn');
+
+        if (!sectionBody) return;
+
+        originalMarkdown = sectionBody.getAttribute('data-original-html') || '';
+        originalHtml = sectionBody.innerHTML;
+
+        sectionBody.contentEditable = 'true';
+        sectionBody.classList.add('editing');
+        addHeadingToolbars();
+
+        tabBtns.forEach(function (b) { b.classList.remove('active'); });
+
+        isEditMode = true;
+        editBtn.textContent = '编辑中...';
+        editBtn.disabled = true;
+        editActions.style.display = '';
+
+        sectionBody.focus();
+    }
+
+    function exitEditMode() {
+        var sectionBody = document.getElementById('section-body');
+        var editBtn = document.getElementById('edit-btn');
+        var editActions = document.getElementById('edit-actions');
+        var tabBtns = document.querySelectorAll('.tab-btn');
+
+        removeHeadingToolbars();
+        sectionBody.contentEditable = 'false';
+        sectionBody.classList.remove('editing');
+        editActions.style.display = 'none';
+
+        var contentTab = document.querySelector('.tab-btn[data-tab="content"]');
+        if (contentTab) {
+            tabBtns.forEach(function (b) { b.classList.remove('active'); });
+            contentTab.classList.add('active');
+        }
+
+        isEditMode = false;
+        editBtn.textContent = '编辑';
+        editBtn.disabled = false;
+    }
+
+    function saveEdit() {
+        var sectionData = window.SECTION_DATA;
+        if (!sectionData || !sectionData.id) return;
+
+        var sectionBody = document.getElementById('section-body');
+        if (!sectionBody) return;
+
+        removeHeadingToolbars();
+        var markdown = htmlToMarkdown(sectionBody);
+
+        fetch('/api/section/' + sectionData.id + '/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: markdown })
+        })
+        .then(function (resp) { return resp.json(); })
+        .then(function (data) {
+            if (data.success) {
+                sectionBody.setAttribute('data-original-html', markdown);
+                sectionBody.innerHTML = markdown;
+                renderMarkdown();
+                exitEditMode();
+            } else {
+                addHeadingToolbars();
+                alert('保存失败: ' + (data.error || '未知错误'));
+            }
+        })
+        .catch(function (err) {
+            addHeadingToolbars();
+            alert('保存失败: ' + err.message);
+        });
+    }
+
+    function cancelEdit() {
+        if (confirm('确定要取消编辑吗？未保存的修改将丢失。')) {
+            var sectionBody = document.getElementById('section-body');
+            sectionBody.innerHTML = originalHtml;
+            exitEditMode();
         }
     }
 

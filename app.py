@@ -1,7 +1,7 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory
 from utils import (
     get_all_books, get_book, get_book_by_short_name,
-    get_section_tree, get_section, search_sections
+    get_section_tree, get_section, search_sections, update_section
 )
 import os
 
@@ -70,6 +70,25 @@ def api_section(section_id):
     if not section:
         return jsonify({'error': 'Not found'}), 404
     return jsonify(section)
+
+
+@app.route('/api/section/<int:section_id>/update', methods=['POST'])
+def api_update_section(section_id):
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'Invalid request'}), 400
+
+    content = data.get('content')
+    heading_text = data.get('heading_text')
+
+    if content is None and heading_text is None:
+        return jsonify({'error': 'No fields to update'}), 400
+
+    try:
+        update_section(section_id, content=content, heading_text=heading_text)
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/search')

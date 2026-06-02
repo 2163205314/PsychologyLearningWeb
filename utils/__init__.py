@@ -298,3 +298,17 @@ def search_sections(query, book_id=None):
 
     conn.close()
     return results
+
+
+def update_section(section_id, content=None, heading_text=None):
+    conn = get_connection()
+    c = conn.cursor()
+
+    if content is not None:
+        c.execute('UPDATE sections SET content = ? WHERE id = ?', (content, section_id))
+    if heading_text is not None:
+        c.execute('UPDATE sections SET heading_text = ? WHERE id = ?', (heading_text, section_id))
+
+    conn.commit()
+    conn.close()
+    return True
