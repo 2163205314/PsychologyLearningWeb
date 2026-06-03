@@ -50,8 +50,16 @@
         </div>
 
         <div class="card-body">
-            <div class="section-body markdown-body" id="section-body" data-original-html="{{ section.content | e }}">
+            <div class="tab-content tab-keypoints" id="tab-keypoints">
+                <div class="keypoints-loading">加载考点中...</div>
+            </div>
+            <div class="tab-content tab-exercises" id="tab-exercises">
+                <div class="exercises-loading">加载习题中...</div>
+            </div>
+            <div class="tab-content tab-original active" id="tab-original">
+                <div class="section-body markdown-body" id="section-body" data-original-html="{{ section.content | e }}">
 {{- section.content | safe -}}
+                </div>
             </div>
         </div>
 

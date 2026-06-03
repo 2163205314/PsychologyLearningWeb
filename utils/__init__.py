@@ -312,3 +312,66 @@ def update_section(section_id, content=None, heading_text=None):
     conn.commit()
     conn.close()
     return True
+
+
+def get_study_points(section_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT id, section_id, point_text, detail, sort_order, importance FROM study_points WHERE section_id = ? ORDER BY sort_order', (section_id,))
+    points = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return points
+
+
+def get_exam_questions(section_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT id, section_id, point_id, question_type, question_text, options, answer, explanation, sort_order FROM exam_questions WHERE section_id = ? ORDER BY sort_order', (section_id,))
+    questions = [dict(row) for row in c.fetchall()]
+    conn.close()
+    return questions
+
+
+def get_section_progress(book_id):
+    conn = get_connection()
+    c = conn.cursor()
+    import re as re_module
+    section_pattern = re_module.compile(r'第[一二三四五六七八九十\d]+节')
+
+    c.execute('SELECT id, heading_text, heading_level FROM sections WHERE book_id = ? ORDER BY sort_order', (book_id,))
+    all_rows = c.fetchall()
+
+    section_level_counts = {}
+    for row in all_rows:
+        if section_pattern.match(row['heading_text']):
+            lvl = row['heading_level']
+            section_level_counts[lvl] = section_level_counts.get(lvl, 0) + 1
+
+    if section_level_counts:
+        page_unit_level = max(section_level_counts, key=section_level_counts.get)
+    else:
+        conn.close()
+        return {'total': 0, 'completed': 0, 'percentage': 0}
+
+    total_sections = 0
+    completed_sections = 0
+
+    for row in all_rows:
+        if row['heading_level'] == page_unit_level:
+            total_sections += 1
+            c.execute('SELECT COUNT(*) as cnt FROM exam_questions WHERE section_id = ?', (row['id'],))
+            cnt = c.fetchone()['cnt']
+            if cnt > 0:
+                completed_sections += 1
+
+    conn.close()
+    percentage = round(completed_sections / total_sections * 100) if total_sections > 0 else 0
+    return {'total': total_sections, 'completed': completed_sections, 'percentage': percentage}
+
+
+def get_books_progress():
+    books = get_all_books()
+    for book in books:
+        progress = get_section_progress(book['id'])
+        book['progress'] = progress
+    return books

@@ -186,20 +186,258 @@
 
         tabBtns.forEach(function(btn) {
             btn.addEventListener('click', function() {
+                if (isEditMode) return;
+
                 tabBtns.forEach(function(b) { b.classList.remove('active'); });
                 this.classList.add('active');
 
                 var tab = this.getAttribute('data-tab');
-                var body = document.getElementById('section-body');
-                if (!body) return;
 
-                if (tab === 'content') {
-                    body.style.display = '';
-                } else {
-                    body.style.display = 'none';
+                var tabKeypoints = document.getElementById('tab-keypoints');
+                var tabExercises = document.getElementById('tab-exercises');
+                var tabOriginal = document.getElementById('tab-original');
+                var editBtn = document.getElementById('edit-btn');
+
+                if (tabKeypoints) tabKeypoints.classList.remove('active');
+                if (tabExercises) tabExercises.classList.remove('active');
+                if (tabOriginal) tabOriginal.classList.remove('active');
+                if (editBtn) editBtn.style.display = 'none';
+
+                if (tab === 'keypoints') {
+                    if (tabKeypoints) {
+                        tabKeypoints.classList.add('active');
+                        loadKeypoints();
+                    }
+                } else if (tab === 'exercises') {
+                    if (tabExercises) {
+                        tabExercises.classList.add('active');
+                        loadExercises();
+                    }
+                } else if (tab === 'content') {
+                    if (tabOriginal) tabOriginal.classList.add('active');
+                    if (editBtn) editBtn.style.display = '';
                 }
             });
         });
+    }
+
+    var keypointsLoaded = false;
+    var exercisesLoaded = false;
+
+    function loadKeypoints() {
+        if (keypointsLoaded) return;
+        var sectionData = window.SECTION_DATA;
+        if (!sectionData || !sectionData.id) return;
+
+        var container = document.getElementById('tab-keypoints');
+        if (!container) return;
+
+        container.innerHTML = '<div class="keypoints-loading">加载考点中...</div>';
+
+        fetch('/api/section/' + sectionData.id + '/points')
+            .then(function(r) { return r.json(); })
+            .then(function(points) {
+                if (points.length === 0) {
+                    container.innerHTML = '<div class="keypoints-loading">暂无考点数据</div>';
+                    return;
+                }
+                var html = '<div class="keypoints-list">';
+                points.forEach(function(p, i) {
+                    var stars = '';
+                    for (var s = 0; s < (p.importance || 3); s++) {
+                        stars += '\u2605';
+                    }
+                    html += '<div class="keypoint-item">';
+                    html += '<div class="keypoint-header">';
+                    html += '<span class="keypoint-num">' + (i + 1) + '</span>';
+                    html += '<span class="keypoint-title">' + escapeHtml(p.point_text) + '</span>';
+                    html += '<span class="keypoint-stars">' + stars + '</span>';
+                    html += '</div>';
+                    if (p.detail) {
+                        html += '<div class="keypoint-detail">' + escapeHtml(p.detail) + '</div>';
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+                keypointsLoaded = true;
+            })
+            .catch(function() {
+                container.innerHTML = '<div class="keypoints-loading">加载失败，请重试</div>';
+            });
+    }
+
+    function loadExercises() {
+        if (exercisesLoaded) return;
+        var sectionData = window.SECTION_DATA;
+        if (!sectionData || !sectionData.id) return;
+
+        var container = document.getElementById('tab-exercises');
+        if (!container) return;
+
+        container.innerHTML = '<div class="exercises-loading">加载习题中...</div>';
+
+        fetch('/api/section/' + sectionData.id + '/questions')
+            .then(function(r) { return r.json(); })
+            .then(function(questions) {
+                if (questions.length === 0) {
+                    container.innerHTML = '<div class="exercises-loading">暂无习题数据</div>';
+                    return;
+                }
+                var html = '<div class="exercises-list">';
+                questions.forEach(function(q, i) {
+                    html += '<div class="question-block" data-qid="' + q.id + '">';
+                    if (q.question_type === 'choice') {
+                        html += renderChoiceQuestion(q, i + 1);
+                    } else if (q.question_type === 'fill_blank') {
+                        html += renderFillBlankQuestion(q, i + 1);
+                    }
+                    html += '</div>';
+                });
+                html += '</div>';
+                container.innerHTML = html;
+                exercisesLoaded = true;
+
+                bindExerciseEvents();
+            })
+            .catch(function() {
+                container.innerHTML = '<div class="exercises-loading">加载失败，请重试</div>';
+            });
+    }
+
+    function renderChoiceQuestion(q, num) {
+        var html = '';
+        html += '<div class="question-stem"><span class="question-num">' + num + '.</span>' + escapeHtml(q.question_text) + '</div>';
+        if (q.options) {
+            try {
+                var options = JSON.parse(q.options);
+                html += '<div class="question-options">';
+                var labels = ['A', 'B', 'C', 'D'];
+                options.forEach(function(opt, oi) {
+                    html += '<div class="option-item" data-answer="' + labels[oi] + '">';
+                    html += '<span class="option-label">' + labels[oi] + '</span>';
+                    html += '<span>' + escapeHtml(opt.substring(2).trim()) + '</span>';
+                    html += '</div>';
+                });
+                html += '</div>';
+            } catch(e) {}
+        }
+        html += '<div class="answer-reveal" id="answer-' + q.id + '">';
+        html += '<strong>正确答案：' + escapeHtml(q.answer) + '</strong>';
+        if (q.explanation) {
+            html += '<br>' + escapeHtml(q.explanation);
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function renderFillBlankQuestion(q, num) {
+        var html = '';
+        var stem = q.question_text;
+        stem = stem.replace(/______/g, '<input type="text" class="fill-blank-input" data-answer-id="' + q.id + '" placeholder="?">');
+        html += '<div class="question-stem"><span class="question-num">' + num + '.</span>' + stem + '</div>';
+        html += '<button class="check-answer-btn" data-answer-id="' + q.id + '">检查答案</button>';
+        html += '<div class="answer-reveal" id="answer-' + q.id + '">';
+        html += '<strong>正确答案：' + escapeHtml(q.answer) + '</strong>';
+        if (q.explanation) {
+            html += '<br>' + escapeHtml(q.explanation);
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function bindExerciseEvents() {
+        var choiceItems = document.querySelectorAll('.option-item');
+        choiceItems.forEach(function(item) {
+            item.addEventListener('click', function() {
+                var block = this.closest('.question-block');
+                if (!block) return;
+                var qid = block.getAttribute('data-qid');
+                var allItems = block.querySelectorAll('.option-item');
+                var selected = this.getAttribute('data-answer');
+                var answerReveal = document.getElementById('answer-' + qid);
+
+                var alreadyAnswered = false;
+                allItems.forEach(function(it) {
+                    if (it.classList.contains('correct') || it.classList.contains('wrong')) {
+                        alreadyAnswered = true;
+                    }
+                });
+                if (alreadyAnswered) return;
+
+                allItems.forEach(function(it) { it.classList.remove('selected'); });
+                this.classList.add('selected');
+
+                if (answerReveal) answerReveal.classList.add('show');
+
+                allItems.forEach(function(it) {
+                    var answer = it.getAttribute('data-answer');
+                    it.style.pointerEvents = 'none';
+                    if (answer === selected) {
+                        it.classList.add(answer === selected ? 'selected' : '');
+                    }
+                });
+
+                var correctAnswer = selected;
+                fetch('/api/section/' + window.SECTION_DATA.id + '/questions')
+                    .then(function(r) { return r.json(); })
+                    .then(function(questions) {
+                        var q = questions.find(function(qq) { return qq.id == qid; });
+                        if (q) correctAnswer = q.answer;
+                        allItems.forEach(function(it) {
+                            var answer = it.getAttribute('data-answer');
+                            if (answer === correctAnswer) {
+                                it.classList.add('correct');
+                            } else if (answer === selected && selected !== correctAnswer) {
+                                it.classList.add('wrong');
+                            }
+                        });
+                    });
+            });
+        });
+
+        var checkBtns = document.querySelectorAll('.check-answer-btn');
+        checkBtns.forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                var qid = btn.getAttribute('data-answer-id');
+                var answerReveal = document.getElementById('answer-' + qid);
+                var inputs = document.querySelectorAll('.fill-blank-input[data-answer-id="' + qid + '"]');
+                var block = btn.closest('.question-block');
+
+                fetch('/api/section/' + window.SECTION_DATA.id + '/questions')
+                    .then(function(r) { return r.json(); })
+                    .then(function(questions) {
+                        var q = questions.find(function(qq) { return qq.id == qid; });
+                        if (!q) return;
+
+                        var correctAnswers = q.answer.split('；');
+                        var allCorrect = true;
+
+                        inputs.forEach(function(input, idx) {
+                            var userAnswer = input.value.trim();
+                            var expected = correctAnswers[idx] ? correctAnswers[idx].trim() : '';
+                            if (userAnswer === expected) {
+                                input.classList.add('correct');
+                                input.classList.remove('wrong');
+                            } else {
+                                input.classList.add('wrong');
+                                input.classList.remove('correct');
+                                allCorrect = false;
+                            }
+                            input.disabled = true;
+                        });
+
+                        if (answerReveal) answerReveal.classList.add('show');
+                        btn.disabled = true;
+                    });
+            });
+        });
+    }
+
+    function escapeHtml(text) {
+        var div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     /* ===== Markdown渲染 + KaTeX ===== */
@@ -624,6 +862,13 @@
         sectionBody.classList.remove('editing');
         editActions.style.display = 'none';
 
+        var tabKeypoints = document.getElementById('tab-keypoints');
+        var tabExercises = document.getElementById('tab-exercises');
+        var tabOriginal = document.getElementById('tab-original');
+        if (tabKeypoints) tabKeypoints.classList.remove('active');
+        if (tabExercises) tabExercises.classList.remove('active');
+        if (tabOriginal) tabOriginal.classList.add('active');
+
         var contentTab = document.querySelector('.tab-btn[data-tab="content"]');
         if (contentTab) {
             tabBtns.forEach(function (b) { b.classList.remove('active'); });
@@ -633,6 +878,7 @@
         isEditMode = false;
         editBtn.textContent = '编辑';
         editBtn.disabled = false;
+        editBtn.style.display = '';
     }
 
     function saveEdit() {

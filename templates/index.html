@@ -26,9 +26,9 @@
             <div class="nav-module-info">
                 <span class="nav-module-title">{{ book.title }}</span>
                 <div class="nav-progress-bar">
-                    <div class="nav-progress-fill" style="width: 0%;"></div>
+                    <div class="nav-progress-fill" style="width: {{ book.progress.percentage }}%;"></div>
                 </div>
-                <span class="nav-progress-text">0%</span>
+                <span class="nav-progress-text">{{ book.progress.percentage }}%（{{ book.progress.completed }}/{{ book.progress.total }}）</span>
             </div>
         </a>
         {% endfor %}
@@ -37,10 +37,13 @@
         <div class="nav-total-progress">
             <div class="nav-total-progress-label">
                 <span>总学习进度</span>
-                <span class="nav-total-progress-text">0%</span>
+                {% set total_completed = books | sum(attribute='progress.completed') %}
+                {% set total_total = books | sum(attribute='progress.total') %}
+                {% set total_pct = (total_completed / total_total * 100) | round if total_total > 0 else 0 %}
+                <span class="nav-total-progress-text">{{ total_pct | int }}%</span>
             </div>
             <div class="nav-progress-bar nav-progress-bar-total">
-                <div class="nav-progress-fill" style="width: 0%;"></div>
+                <div class="nav-progress-fill" style="width: {{ total_pct }}%;"></div>
             </div>
         </div>
     </div>

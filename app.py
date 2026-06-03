@@ -1,7 +1,8 @@
 from flask import Flask, render_template, jsonify, request, redirect, url_for, send_from_directory
 from utils import (
     get_all_books, get_book, get_book_by_short_name,
-    get_section_tree, get_section, search_sections, update_section
+    get_section_tree, get_section, search_sections, update_section,
+    get_study_points, get_exam_questions, get_section_progress, get_books_progress
 )
 import os
 
@@ -17,7 +18,7 @@ def serve_image(filename):
 
 @app.route('/')
 def index():
-    books = get_all_books()
+    books = get_books_progress()
     return render_template('index.html', books=books)
 
 
@@ -101,6 +102,30 @@ def api_search():
         book_id = int(book_id)
     results = search_sections(query, book_id)
     return jsonify(results)
+
+
+@app.route('/api/section/<int:section_id>/points')
+def api_section_points(section_id):
+    points = get_study_points(section_id)
+    return jsonify(points)
+
+
+@app.route('/api/section/<int:section_id>/questions')
+def api_section_questions(section_id):
+    questions = get_exam_questions(section_id)
+    return jsonify(questions)
+
+
+@app.route('/api/book/<int:book_id>/progress')
+def api_book_progress(book_id):
+    progress = get_section_progress(book_id)
+    return jsonify(progress)
+
+
+@app.route('/api/books/progress')
+def api_books_progress():
+    books = get_books_progress()
+    return jsonify(books)
 
 
 if __name__ == '__main__':
