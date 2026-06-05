@@ -201,7 +201,6 @@
                 if (tabKeypoints) tabKeypoints.classList.remove('active');
                 if (tabExercises) tabExercises.classList.remove('active');
                 if (tabOriginal) tabOriginal.classList.remove('active');
-                if (editBtn) editBtn.style.display = 'none';
 
                 if (tab === 'keypoints') {
                     if (tabKeypoints) {
@@ -215,8 +214,9 @@
                     }
                 } else if (tab === 'content') {
                     if (tabOriginal) tabOriginal.classList.add('active');
-                    if (editBtn) editBtn.style.display = '';
                 }
+
+                if (editBtn) editBtn.style.display = '';
             });
         });
     }
@@ -224,8 +224,11 @@
     var keypointsLoaded = false;
     var exercisesLoaded = false;
 
-    function loadKeypoints() {
-        if (keypointsLoaded) return;
+    function loadKeypoints(callback) {
+        if (keypointsLoaded) {
+            if (callback) callback();
+            return;
+        }
         var sectionData = window.SECTION_DATA;
         if (!sectionData || !sectionData.id) return;
 
@@ -247,7 +250,7 @@
                     for (var s = 0; s < (p.importance || 3); s++) {
                         stars += '\u2605';
                     }
-                    html += '<div class="keypoint-item">';
+                    html += '<div class="keypoint-item" data-pid="' + p.id + '">';
                     html += '<div class="keypoint-header">';
                     html += '<span class="keypoint-num">' + (i + 1) + '</span>';
                     html += '<span class="keypoint-title">' + escapeHtml(p.point_text) + '</span>';
@@ -261,14 +264,18 @@
                 html += '</div>';
                 container.innerHTML = html;
                 keypointsLoaded = true;
+                if (callback) callback();
             })
             .catch(function() {
                 container.innerHTML = '<div class="keypoints-loading">加载失败，请重试</div>';
             });
     }
 
-    function loadExercises() {
-        if (exercisesLoaded) return;
+    function loadExercises(callback) {
+        if (exercisesLoaded) {
+            if (callback) callback();
+            return;
+        }
         var sectionData = window.SECTION_DATA;
         if (!sectionData || !sectionData.id) return;
 
@@ -297,8 +304,8 @@
                 html += '</div>';
                 container.innerHTML = html;
                 exercisesLoaded = true;
-
                 bindExerciseEvents();
+                if (callback) callback();
             })
             .catch(function() {
                 container.innerHTML = '<div class="exercises-loading">加载失败，请重试</div>';
@@ -334,7 +341,7 @@
     function renderFillBlankQuestion(q, num) {
         var html = '';
         var stem = q.question_text;
-        stem = stem.replace(/______/g, '<input type="text" class="fill-blank-input" data-answer-id="' + q.id + '" placeholder="?">');
+        stem = stem.replace(/_{4,}/g, '<input type="text" class="fill-blank-input" data-answer-id="' + q.id + '" placeholder="?">');
         html += '<div class="question-stem"><span class="question-num">' + num + '.</span>' + stem + '</div>';
         html += '<button class="check-answer-btn" data-answer-id="' + q.id + '">检查答案</button>';
         html += '<div class="answer-reveal" id="answer-' + q.id + '">';
@@ -350,6 +357,7 @@
         var choiceItems = document.querySelectorAll('.option-item');
         choiceItems.forEach(function(item) {
             item.addEventListener('click', function() {
+                if (isEditMode) return;
                 var block = this.closest('.question-block');
                 if (!block) return;
                 var qid = block.getAttribute('data-qid');
@@ -399,6 +407,7 @@
         var checkBtns = document.querySelectorAll('.check-answer-btn');
         checkBtns.forEach(function(btn) {
             btn.addEventListener('click', function() {
+                if (isEditMode) return;
                 var qid = btn.getAttribute('data-answer-id');
                 var answerReveal = document.getElementById('answer-' + qid);
                 var inputs = document.querySelectorAll('.fill-blank-input[data-answer-id="' + qid + '"]');
@@ -410,7 +419,7 @@
                         var q = questions.find(function(qq) { return qq.id == qid; });
                         if (!q) return;
 
-                        var correctAnswers = q.answer.split('；');
+                        var correctAnswers = (q.answer || '').split(/[；;]/).map(function(item) { return item.trim(); }).filter(Boolean);
                         var allCorrect = true;
 
                         inputs.forEach(function(input, idx) {
@@ -509,12 +518,7 @@
         });
     }
 
-    /* ===== HTML转义 ===== */
-    function escapeHtml(text) {
-        var div = document.createElement('div');
-        div.appendChild(document.createTextNode(text));
-        return div.innerHTML;
-    }
+    
 
     /* ===== 首页导航栏收起/展开 ===== */
     function initNavSidebar() {
@@ -651,6 +655,8 @@
         renderMarkdown();
         initTabs();
         initEditMode();
+        initFormattingToolbar();
+        initModal();
         highlightSearchTerm();
         saveLastViewedSection();
         handleAnchorScroll();
@@ -663,8 +669,11 @@
 
     /* ===== 编辑模式 ===== */
     var isEditMode = false;
+    var editTab = '';
     var originalHtml = '';
-    var originalMarkdown = '';
+    var savedScrollTop = 0;
+    var pendingKeypointDeletes = [];
+    var pendingQuestionDeletes = [];
 
     function htmlToMarkdown(node) {
         if (!node) return '';
@@ -722,7 +731,20 @@
             }
             if (tag === 'br') return '\n';
             if (tag === 'hr') return '---\n\n';
-            if (tag === 'div' || tag === 'span' || tag === 'a' || tag === 'code') {
+            if (tag === 'span') {
+                var sid = n.getAttribute('id');
+                if (sid && sid.indexOf('section-') === 0) {
+                    return '<span id="' + sid + '"></span>';
+                }
+                var style = n.getAttribute('style') || '';
+                if (style.indexOf('background-color') !== -1) {
+                    return '<mark>' + processChildren(n) + '</mark>';
+                }
+                return processChildren(n);
+            }
+            if (tag === 'mark') return '<mark>' + processChildren(n) + '</mark>';
+            if (tag === 'u') return '<u>' + processChildren(n) + '</u>';
+            if (tag === 'div' || tag === 'code') {
                 return processChildren(n);
             }
 
@@ -752,7 +774,7 @@
         var level = parseInt(heading.tagName[1], 10);
 
         var upBtn = document.createElement('button');
-        upBtn.innerHTML = '↑';
+        upBtn.innerHTML = '&#8593;';
         upBtn.title = '升级标题';
         upBtn.disabled = level <= 1;
         upBtn.addEventListener('click', function (e) {
@@ -763,7 +785,7 @@
         });
 
         var downBtn = document.createElement('button');
-        downBtn.innerHTML = '↓';
+        downBtn.innerHTML = '&#8595;';
         downBtn.title = '降级标题';
         downBtn.disabled = level >= 6;
         downBtn.addEventListener('click', function (e) {
@@ -780,14 +802,18 @@
     }
 
     function changeHeadingLevel(heading, newLevel) {
+        var toolbar = heading.querySelector('.heading-toolbar');
+        if (toolbar) toolbar.remove();
         var content = heading.innerHTML;
         var newHeading = document.createElement('h' + newLevel);
         newHeading.innerHTML = content;
         heading.parentNode.replaceChild(newHeading, heading);
+        createHeadingToolbar(newHeading);
     }
 
     function addHeadingToolbars() {
         var sectionBody = document.getElementById('section-body');
+        if (!sectionBody) return;
         var headings = sectionBody.querySelectorAll('h1, h2, h3, h4, h5, h6');
         headings.forEach(function (heading) {
             if (!heading.querySelector('.heading-toolbar')) {
@@ -798,6 +824,7 @@
 
     function removeHeadingToolbars() {
         var sectionBody = document.getElementById('section-body');
+        if (!sectionBody) return;
         var toolbars = sectionBody.querySelectorAll('.heading-toolbar');
         toolbars.forEach(function (tb) { tb.remove(); });
     }
@@ -806,10 +833,8 @@
         var editBtn = document.getElementById('edit-btn');
         var saveBtn = document.getElementById('save-btn');
         var cancelBtn = document.getElementById('cancel-btn');
-        var editActions = document.getElementById('edit-actions');
-        var sectionBody = document.getElementById('section-body');
 
-        if (!editBtn || !sectionBody) return;
+        if (!editBtn) return;
 
         editBtn.addEventListener('click', function () {
             enterEditMode();
@@ -824,67 +849,236 @@
         });
     }
 
+    function getActiveEditContainer() {
+        var activeTab = document.querySelector('.tab-content.active');
+        if (!activeTab) return null;
+        if (activeTab.id === 'tab-original') return document.getElementById('section-body');
+        if (activeTab.id === 'tab-keypoints') return activeTab;
+        if (activeTab.id === 'tab-exercises') return activeTab;
+        return null;
+    }
+
     function enterEditMode() {
         if (isEditMode) return;
 
-        var sectionBody = document.getElementById('section-body');
         var editBtn = document.getElementById('edit-btn');
-        var editActions = document.getElementById('edit-actions');
+        var saveBtn = document.getElementById('save-btn');
+        var cancelBtn = document.getElementById('cancel-btn');
+        var toolbar = document.getElementById('formatting-toolbar');
+        var cardBody = document.querySelector('.card-body');
         var tabBtns = document.querySelectorAll('.tab-btn');
 
-        if (!sectionBody) return;
+        var activeTab = document.querySelector('.tab-btn.active');
+        editTab = activeTab ? activeTab.getAttribute('data-tab') : 'content';
 
-        originalMarkdown = sectionBody.getAttribute('data-original-html') || '';
-        originalHtml = sectionBody.innerHTML;
+        if (editTab === 'content') {
+            var sectionBody = document.getElementById('section-body');
+            if (!sectionBody) return;
+            savedScrollTop = cardBody ? cardBody.scrollTop : 0;
+            originalHtml = sectionBody.innerHTML;
+            sectionBody.contentEditable = 'true';
+            sectionBody.classList.add('editing');
+            addHeadingToolbars();
+            finishEnterEditMode(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+        } else if (editTab === 'keypoints') {
+            savedScrollTop = cardBody ? cardBody.scrollTop : 0;
+            if (keypointsLoaded) {
+                doEnterKeypointsEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+            } else {
+                loadKeypoints(function () {
+                    doEnterKeypointsEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+                });
+            }
+        } else if (editTab === 'exercises') {
+            savedScrollTop = cardBody ? cardBody.scrollTop : 0;
+            if (exercisesLoaded) {
+                doEnterExercisesEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+            } else {
+                loadExercises(function () {
+                    doEnterExercisesEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+                });
+            }
+        }
+    }
 
-        sectionBody.contentEditable = 'true';
-        sectionBody.classList.add('editing');
-        addHeadingToolbars();
+    function doEnterKeypointsEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns) {
+        var kpContainer = document.getElementById('tab-keypoints');
+        originalHtml = kpContainer ? kpContainer.innerHTML : '';
+        if (kpContainer) {
+            kpContainer.classList.add('editing');
+            makeKeypointsEditable();
+        }
+        finishEnterEditMode(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+    }
 
+    function doEnterExercisesEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns) {
+        var exContainer = document.getElementById('tab-exercises');
+        originalHtml = exContainer ? exContainer.innerHTML : '';
+        if (exContainer) {
+            exContainer.classList.add('editing');
+            makeExercisesEditable();
+        }
+        finishEnterEditMode(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+    }
+
+    function finishEnterEditMode(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns) {
         tabBtns.forEach(function (b) { b.classList.remove('active'); });
+        var currentTabBtn = document.querySelector('.tab-btn[data-tab="' + editTab + '"]');
+        if (currentTabBtn) currentTabBtn.classList.add('active');
 
         isEditMode = true;
-        editBtn.textContent = '编辑中...';
-        editBtn.disabled = true;
-        editActions.style.display = '';
+        editBtn.style.display = 'none';
+        saveBtn.style.display = '';
+        cancelBtn.style.display = '';
 
-        sectionBody.focus();
+        if (toolbar) {
+            toolbar.style.display = '';
+            updateToolbarButtons();
+        }
+
+        if (cardBody) {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    cardBody.scrollTop = savedScrollTop;
+                });
+            });
+        }
+    }
+
+    function updateToolbarButtons() {
+        var toolAddKeypoint = document.getElementById('tool-add-keypoint');
+        var toolAddQuestion = document.getElementById('tool-add-question');
+
+        if (toolAddKeypoint) toolAddKeypoint.style.display = (editTab === 'keypoints') ? '' : 'none';
+        if (toolAddQuestion) toolAddQuestion.style.display = (editTab === 'exercises') ? '' : 'none';
+    }
+
+    function makeKeypointsEditable() {
+        var container = document.getElementById('tab-keypoints');
+        if (!container) return;
+
+        var items = container.querySelectorAll('.keypoint-item');
+        items.forEach(function (item) {
+            var titleEl = item.querySelector('.keypoint-title');
+            var detailEl = item.querySelector('.keypoint-detail');
+            var starsEl = item.querySelector('.keypoint-stars');
+
+            if (titleEl) titleEl.contentEditable = 'true';
+            if (detailEl) detailEl.contentEditable = 'true';
+
+            var delBtn = document.createElement('button');
+            delBtn.className = 'kp-delete-btn';
+            delBtn.innerHTML = '&times;';
+            delBtn.title = '删除考点';
+            delBtn.addEventListener('click', function () {
+                var pid = item.getAttribute('data-pid');
+                if (pid) {
+                    pendingKeypointDeletes.push(parseInt(pid));
+                    item.style.display = 'none';
+                }
+            });
+            item.appendChild(delBtn);
+        });
+
+        container.querySelectorAll('.keypoint-stars').forEach(function (stars) {
+            stars.contentEditable = 'false';
+        });
+    }
+
+    function makeExercisesEditable() {
+        var container = document.getElementById('tab-exercises');
+        if (!container) return;
+
+        var blocks = container.querySelectorAll('.question-block');
+        blocks.forEach(function (block) {
+            var delBtn = document.createElement('button');
+            delBtn.className = 'q-delete-btn';
+            delBtn.innerHTML = '&times;';
+            delBtn.title = '删除习题';
+            delBtn.addEventListener('click', function () {
+                var qid = block.getAttribute('data-qid');
+                if (qid) {
+                    pendingQuestionDeletes.push(parseInt(qid));
+                    block.style.display = 'none';
+                }
+            });
+            block.appendChild(delBtn);
+
+            var stem = block.querySelector('.question-stem');
+            if (stem) {
+                var stemText = stem.querySelector('.question-num');
+                var editBtn2 = document.createElement('button');
+                editBtn2.className = 'q-edit-btn';
+                editBtn2.innerHTML = '编辑';
+                editBtn2.title = '编辑习题';
+                editBtn2.addEventListener('click', function () {
+                    var qid = block.getAttribute('data-qid');
+                    openQuestionEditModal(qid);
+                });
+                stem.appendChild(editBtn2);
+            }
+        });
     }
 
     function exitEditMode() {
-        var sectionBody = document.getElementById('section-body');
         var editBtn = document.getElementById('edit-btn');
-        var editActions = document.getElementById('edit-actions');
+        var saveBtn = document.getElementById('save-btn');
+        var cancelBtn = document.getElementById('cancel-btn');
+        var toolbar = document.getElementById('formatting-toolbar');
         var tabBtns = document.querySelectorAll('.tab-btn');
+        var cardBody = document.querySelector('.card-body');
 
-        removeHeadingToolbars();
-        sectionBody.contentEditable = 'false';
-        sectionBody.classList.remove('editing');
-        editActions.style.display = 'none';
+        if (toolbar) toolbar.style.display = 'none';
 
-        var tabKeypoints = document.getElementById('tab-keypoints');
-        var tabExercises = document.getElementById('tab-exercises');
-        var tabOriginal = document.getElementById('tab-original');
-        if (tabKeypoints) tabKeypoints.classList.remove('active');
-        if (tabExercises) tabExercises.classList.remove('active');
-        if (tabOriginal) tabOriginal.classList.add('active');
-
-        var contentTab = document.querySelector('.tab-btn[data-tab="content"]');
-        if (contentTab) {
-            tabBtns.forEach(function (b) { b.classList.remove('active'); });
-            contentTab.classList.add('active');
+        if (editTab === 'content') {
+            var sectionBody = document.getElementById('section-body');
+            removeHeadingToolbars();
+            if (sectionBody) {
+                sectionBody.contentEditable = 'false';
+                sectionBody.classList.remove('editing');
+            }
+        } else if (editTab === 'keypoints') {
+            var kpContainer = document.getElementById('tab-keypoints');
+            if (kpContainer) {
+                kpContainer.classList.remove('editing');
+                kpContainer.querySelectorAll('.kp-delete-btn').forEach(function (b) { b.remove(); });
+            }
+        } else if (editTab === 'exercises') {
+            var exContainer = document.getElementById('tab-exercises');
+            if (exContainer) {
+                exContainer.classList.remove('editing');
+                exContainer.querySelectorAll('.q-delete-btn, .q-edit-btn').forEach(function (b) { b.remove(); });
+            }
         }
 
         isEditMode = false;
-        editBtn.textContent = '编辑';
-        editBtn.disabled = false;
         editBtn.style.display = '';
+        saveBtn.style.display = 'none';
+        cancelBtn.style.display = 'none';
+
+        if (cardBody) {
+            requestAnimationFrame(function () {
+                requestAnimationFrame(function () {
+                    cardBody.scrollTop = savedScrollTop;
+                });
+            });
+        }
     }
 
     function saveEdit() {
         var sectionData = window.SECTION_DATA;
         if (!sectionData || !sectionData.id) return;
 
+        if (editTab === 'content') {
+            saveContentEdit(sectionData);
+        } else if (editTab === 'keypoints') {
+            saveKeypointsEdit(sectionData);
+        } else if (editTab === 'exercises') {
+            saveExercisesEdit(sectionData);
+        }
+    }
+
+    function saveContentEdit(sectionData) {
         var sectionBody = document.getElementById('section-body');
         if (!sectionBody) return;
 
@@ -914,11 +1108,356 @@
         });
     }
 
+    function saveKeypointsEdit(sectionData) {
+        var container = document.getElementById('tab-keypoints');
+        if (!container) return;
+
+        var promises = [];
+
+        var items = container.querySelectorAll('.keypoint-item');
+        items.forEach(function (item) {
+            var pid = item.getAttribute('data-pid');
+            if (!pid || item.style.display === 'none') return;
+
+            var titleEl = item.querySelector('.keypoint-title');
+            var detailEl = item.querySelector('.keypoint-detail');
+            var pointText = titleEl ? titleEl.textContent.trim() : '';
+            var detail = detailEl ? detailEl.textContent.trim() : '';
+
+            if (pointText) {
+                promises.push(
+                    fetch('/api/point/' + pid, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ point_text: pointText, detail: detail })
+                    })
+                );
+            }
+        });
+
+        pendingKeypointDeletes.forEach(function (pid) {
+            promises.push(
+                fetch('/api/point/' + pid, { method: 'DELETE' })
+            );
+        });
+
+        Promise.all(promises)
+            .then(function () {
+                pendingKeypointDeletes = [];
+                keypointsLoaded = false;
+                loadKeypoints(exitEditMode);
+            })
+            .catch(function (err) {
+                alert('保存失败: ' + err.message);
+            });
+    }
+
+    function saveExercisesEdit(sectionData) {
+        var promises = [];
+
+        pendingQuestionDeletes.forEach(function (qid) {
+            promises.push(
+                fetch('/api/question/' + qid, { method: 'DELETE' })
+            );
+        });
+
+        Promise.all(promises)
+            .then(function () {
+                pendingQuestionDeletes = [];
+                exercisesLoaded = false;
+                loadExercises(exitEditMode);
+            })
+            .catch(function (err) {
+                alert('保存失败: ' + err.message);
+            });
+    }
+
     function cancelEdit() {
-        if (confirm('确定要取消编辑吗？未保存的修改将丢失。')) {
+        if (!confirm('确定要取消编辑吗？未保存的修改将丢失。')) return;
+
+        if (editTab === 'content') {
             var sectionBody = document.getElementById('section-body');
-            sectionBody.innerHTML = originalHtml;
-            exitEditMode();
+            if (sectionBody) sectionBody.innerHTML = originalHtml;
+        } else if (editTab === 'keypoints') {
+            var kpContainer = document.getElementById('tab-keypoints');
+            if (kpContainer && originalHtml) kpContainer.innerHTML = originalHtml;
+        } else if (editTab === 'exercises') {
+            var exContainer = document.getElementById('tab-exercises');
+            if (exContainer && originalHtml) exContainer.innerHTML = originalHtml;
+            bindExerciseEvents();
+        }
+
+        pendingKeypointDeletes = [];
+        pendingQuestionDeletes = [];
+        exitEditMode();
+    }
+
+    function initFormattingToolbar() {
+        var toolbar = document.getElementById('formatting-toolbar');
+        if (!toolbar) return;
+
+        toolbar.addEventListener('click', function (e) {
+            var btn = e.target.closest('.tool-btn');
+            if (!btn) return;
+
+            var action = btn.getAttribute('data-action');
+
+            if (action === 'bold') {
+                document.execCommand('bold', false, null);
+            } else if (action === 'highlight') {
+                document.execCommand('hiliteColor', false, '#fef08a');
+            } else if (action === 'underline') {
+                document.execCommand('underline', false, null);
+            } else if (action === 'add-keypoint') {
+                openKeypointModal();
+            } else if (action === 'add-question') {
+                openQuestionModal();
+            }
+        });
+
+        document.addEventListener('keydown', function (e) {
+            if (!isEditMode) return;
+            if (e.ctrlKey && e.key === 'b') {
+                e.preventDefault();
+                document.execCommand('bold', false, null);
+            }
+        });
+    }
+
+    function openKeypointModal() {
+        var overlay = document.getElementById('modal-overlay');
+        var form = document.getElementById('modal-keypoint-form');
+        if (!overlay || !form) return;
+
+        var qForm = document.getElementById('modal-question-form');
+        if (qForm) qForm.style.display = 'none';
+
+        document.getElementById('kp-point-text').value = '';
+        document.getElementById('kp-detail').value = '';
+        document.getElementById('kp-importance').value = '3';
+
+        overlay.style.display = 'flex';
+        form.style.display = 'block';
+    }
+
+    function closeKeypointModal() {
+        var overlay = document.getElementById('modal-overlay');
+        var form = document.getElementById('modal-keypoint-form');
+        if (overlay) overlay.style.display = 'none';
+        if (form) form.style.display = 'none';
+    }
+
+    function saveKeypointFromModal() {
+        var sectionData = window.SECTION_DATA;
+        var pointText = document.getElementById('kp-point-text').value.trim();
+        var detail = document.getElementById('kp-detail').value.trim();
+        var importance = parseInt(document.getElementById('kp-importance').value);
+
+        if (!pointText) {
+            alert('请输入考点名称');
+            return;
+        }
+
+        fetch('/api/point', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                section_id: sectionData.id,
+                point_text: pointText,
+                detail: detail,
+                importance: importance
+            })
+        })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (data.success) {
+                closeKeypointModal();
+                keypointsLoaded = false;
+                loadKeypoints(function () {
+                    makeKeypointsEditable();
+                    rehidePendingKeypointDeletes();
+                });
+            } else {
+                alert('添加失败: ' + (data.error || '未知错误'));
+            }
+        })
+        .catch(function (err) {
+            alert('添加失败: ' + err.message);
+        });
+    }
+
+    function rehidePendingKeypointDeletes() {
+        pendingKeypointDeletes.forEach(function (pid) {
+            var item = document.querySelector('.keypoint-item[data-pid="' + pid + '"]');
+            if (item) item.style.display = 'none';
+        });
+    }
+
+    function rehidePendingQuestionDeletes() {
+        pendingQuestionDeletes.forEach(function (qid) {
+            var block = document.querySelector('.question-block[data-qid="' + qid + '"]');
+            if (block) block.style.display = 'none';
+        });
+    }
+
+    function initModal() {
+        var overlay = document.getElementById('modal-overlay');
+        if (!overlay) return;
+
+        document.getElementById('modal-close').addEventListener('click', closeKeypointModal);
+        document.getElementById('modal-cancel').addEventListener('click', closeKeypointModal);
+        document.getElementById('modal-save').addEventListener('click', saveKeypointFromModal);
+
+        document.getElementById('modal-q-close').addEventListener('click', closeQuestionModal);
+        document.getElementById('modal-q-cancel').addEventListener('click', closeQuestionModal);
+        document.getElementById('modal-q-save').addEventListener('click', saveQuestionFromModal);
+
+        overlay.addEventListener('click', function (e) {
+            if (e.target === overlay) {
+                closeKeypointModal();
+                closeQuestionModal();
+            }
+        });
+
+        var qType = document.getElementById('q-type');
+        if (qType) {
+            qType.addEventListener('change', function () {
+                var optsGroup = document.getElementById('q-options-group');
+                if (optsGroup) {
+                    optsGroup.style.display = this.value === 'choice' ? '' : 'none';
+                }
+            });
+        }
+    }
+
+    function openQuestionModal() {
+        var overlay = document.getElementById('modal-overlay');
+        var form = document.getElementById('modal-question-form');
+        if (!overlay || !form) return;
+
+        var kpForm = document.getElementById('modal-keypoint-form');
+        if (kpForm) kpForm.style.display = 'none';
+
+        document.getElementById('modal-q-title').textContent = '新增习题';
+        document.getElementById('q-type').value = 'choice';
+        document.getElementById('q-text').value = '';
+        document.getElementById('q-options').value = '';
+        document.getElementById('q-answer').value = '';
+        document.getElementById('q-explanation').value = '';
+        document.getElementById('q-options-group').style.display = '';
+
+        overlay.style.display = 'flex';
+        form.style.display = 'block';
+        form.removeAttribute('data-edit-id');
+    }
+
+    function openQuestionEditModal(qid) {
+        var overlay = document.getElementById('modal-overlay');
+        var form = document.getElementById('modal-question-form');
+        if (!overlay || !form) return;
+
+        var kpForm = document.getElementById('modal-keypoint-form');
+        if (kpForm) kpForm.style.display = 'none';
+
+        fetch('/api/section/' + window.SECTION_DATA.id + '/questions')
+            .then(function (r) { return r.json(); })
+            .then(function (questions) {
+                var q = questions.find(function (qq) { return qq.id == qid; });
+                if (!q) return;
+
+                document.getElementById('modal-q-title').textContent = '编辑习题';
+                document.getElementById('q-type').value = q.question_type;
+                document.getElementById('q-text').value = q.question_text;
+                document.getElementById('q-options').value = q.options || '';
+                document.getElementById('q-answer').value = q.answer;
+                document.getElementById('q-explanation').value = q.explanation || '';
+                document.getElementById('q-options-group').style.display = q.question_type === 'choice' ? '' : 'none';
+
+                overlay.style.display = 'flex';
+                form.style.display = 'block';
+                form.setAttribute('data-edit-id', qid);
+            });
+    }
+
+    function closeQuestionModal() {
+        var overlay = document.getElementById('modal-overlay');
+        var form = document.getElementById('modal-question-form');
+        if (overlay) overlay.style.display = 'none';
+        if (form) form.style.display = 'none';
+    }
+
+    function saveQuestionFromModal() {
+        var sectionData = window.SECTION_DATA;
+        var form = document.getElementById('modal-question-form');
+        var editId = form ? form.getAttribute('data-edit-id') : null;
+
+        var questionType = document.getElementById('q-type').value;
+        var questionText = document.getElementById('q-text').value.trim();
+        var options = document.getElementById('q-options').value.trim();
+        var answer = document.getElementById('q-answer').value.trim();
+        var explanation = document.getElementById('q-explanation').value.trim();
+
+        if (!questionText || !answer) {
+            alert('请输入题目和答案');
+            return;
+        }
+
+        if (editId) {
+            fetch('/api/question/' + editId, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    question_text: questionText,
+                    options: options || null,
+                    answer: answer,
+                    explanation: explanation
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    closeQuestionModal();
+                    exercisesLoaded = false;
+                    loadExercises(function () {
+                        makeExercisesEditable();
+                        rehidePendingQuestionDeletes();
+                    });
+                } else {
+                    alert('更新失败: ' + (data.error || '未知错误'));
+                }
+            })
+            .catch(function (err) {
+                alert('更新失败: ' + err.message);
+            });
+        } else {
+            fetch('/api/question', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    section_id: sectionData.id,
+                    question_type: questionType,
+                    question_text: questionText,
+                    options: options || null,
+                    answer: answer,
+                    explanation: explanation
+                })
+            })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.success) {
+                    closeQuestionModal();
+                    exercisesLoaded = false;
+                    loadExercises(function () {
+                        makeExercisesEditable();
+                        rehidePendingQuestionDeletes();
+                    });
+                } else {
+                    alert('添加失败: ' + (data.error || '未知错误'));
+                }
+            })
+            .catch(function (err) {
+                alert('添加失败: ' + err.message);
+            });
         }
     }
 

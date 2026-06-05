@@ -136,22 +136,35 @@ def get_section(section_id):
         children_map[pid].append(r)
 
     if section['heading_level'] == page_unit_level:
-        merged_parts = [section['content'] or '']
+        children = children_map.get(section_id, [])
+        already_merged = False
+        if children and section['content']:
+            first_child = children[0]
+            first_child_id = first_child['id']
+            if 'id="section-' + str(first_child_id) + '"' in section['content']:
+                already_merged = True
+            else:
+                heading_prefix = '## ' if first_child['heading_level'] > page_unit_level else '### '
+                if (heading_prefix + first_child['heading_text']) in section['content']:
+                    already_merged = True
 
-        def merge_descendants(node_id):
-            children = children_map.get(node_id, [])
-            for child in children:
-                level = child['heading_level']
-                heading_prefix = '#' * (level - page_unit_level + 1) if level > page_unit_level else '##'
-                merged_parts.append(
-                    '\n\n<span id="section-' + str(child['id']) + '"></span>\n\n'
-                    + heading_prefix + ' ' + child['heading_text'] + '\n\n'
-                    + (child['content'] or '')
-                )
-                merge_descendants(child['id'])
+        if not already_merged:
+            merged_parts = [section['content'] or '']
 
-        merge_descendants(section_id)
-        section['content'] = '\n'.join(merged_parts)
+            def merge_descendants(node_id):
+                sub_children = children_map.get(node_id, [])
+                for child in sub_children:
+                    level = child['heading_level']
+                    heading_prefix = '#' * (level - page_unit_level + 1) if level > page_unit_level else '##'
+                    merged_parts.append(
+                        '\n\n<span id="section-' + str(child['id']) + '"></span>\n\n'
+                        + heading_prefix + ' ' + child['heading_text'] + '\n\n'
+                        + (child['content'] or '')
+                    )
+                    merge_descendants(child['id'])
+
+            merge_descendants(section_id)
+            section['content'] = '\n'.join(merged_parts)
 
         all_merged = []
 
@@ -330,6 +343,100 @@ def get_exam_questions(section_id):
     questions = [dict(row) for row in c.fetchall()]
     conn.close()
     return questions
+
+
+def add_study_point(section_id, point_text, detail='', importance=3):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM study_points WHERE section_id = ?', (section_id,))
+    sort_order = c.fetchone()[0]
+    c.execute('INSERT INTO study_points (section_id, point_text, detail, sort_order, importance) VALUES (?, ?, ?, ?, ?)',
+              (section_id, point_text, detail, sort_order, importance))
+    conn.commit()
+    point_id = c.lastrowid
+    conn.close()
+    return point_id
+
+
+def update_study_point(point_id, point_text=None, detail=None, importance=None):
+    conn = get_connection()
+    c = conn.cursor()
+    fields = []
+    values = []
+    if point_text is not None:
+        fields.append('point_text = ?')
+        values.append(point_text)
+    if detail is not None:
+        fields.append('detail = ?')
+        values.append(detail)
+    if importance is not None:
+        fields.append('importance = ?')
+        values.append(importance)
+    if fields:
+        values.append(point_id)
+        c.execute('UPDATE study_points SET ' + ', '.join(fields) + ' WHERE id = ?', values)
+        conn.commit()
+    conn.close()
+    return True
+
+
+def delete_study_point(point_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM study_points WHERE id = ?', (point_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+
+def add_exam_question(section_id, question_type, question_text, answer, point_id=None, options=None, explanation=None):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('SELECT COALESCE(MAX(sort_order), 0) + 1 FROM exam_questions WHERE section_id = ?', (section_id,))
+    sort_order = c.fetchone()[0]
+    c.execute('INSERT INTO exam_questions (section_id, point_id, question_type, question_text, options, answer, explanation, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+              (section_id, point_id, question_type, question_text, options, answer, explanation, sort_order))
+    conn.commit()
+    question_id = c.lastrowid
+    conn.close()
+    return question_id
+
+
+def update_exam_question(question_id, question_text=None, options=None, answer=None, explanation=None, point_id=None):
+    conn = get_connection()
+    c = conn.cursor()
+    fields = []
+    values = []
+    if question_text is not None:
+        fields.append('question_text = ?')
+        values.append(question_text)
+    if options is not None:
+        fields.append('options = ?')
+        values.append(options)
+    if answer is not None:
+        fields.append('answer = ?')
+        values.append(answer)
+    if explanation is not None:
+        fields.append('explanation = ?')
+        values.append(explanation)
+    if point_id is not None:
+        fields.append('point_id = ?')
+        values.append(point_id)
+    if fields:
+        values.append(question_id)
+        c.execute('UPDATE exam_questions SET ' + ', '.join(fields) + ' WHERE id = ?', values)
+        conn.commit()
+    conn.close()
+    return True
+
+
+def delete_exam_question(question_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('DELETE FROM exam_questions WHERE id = ?', (question_id,))
+    conn.commit()
+    conn.close()
+    return True
 
 
 def get_section_progress(book_id):

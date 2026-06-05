@@ -45,7 +45,17 @@
                 <button class="tab-btn" data-tab="keypoints">考点</button>
                 <button class="tab-btn" data-tab="exercises">习题</button>
                 <button class="tab-btn active" data-tab="content">原文</button>
-                <button class="edit-btn" id="edit-btn" title="编辑原文">编辑</button>
+            </div>
+        </div>
+
+        <div class="formatting-toolbar" id="formatting-toolbar" style="display:none;">
+            <div class="toolbar-group">
+                <button class="tool-btn" data-action="bold" title="加粗 (Ctrl+B)"><strong>B</strong></button>
+                <button class="tool-btn" data-action="highlight" title="高亮标记"><span class="hl-icon">H</span></button>
+                <button class="tool-btn" data-action="underline" title="下划线"><u>U</u></button>
+                <span class="toolbar-divider"></span>
+                <button class="tool-btn" data-action="add-keypoint" id="tool-add-keypoint" title="新增考点" style="display:none;">+考点</button>
+                <button class="tool-btn" data-action="add-question" id="tool-add-question" title="新增习题" style="display:none;">+习题</button>
             </div>
         </div>
 
@@ -71,9 +81,10 @@
                 <span class="nav-btn nav-prev disabled"></span>
                 {% endif %}
 
-                <div class="edit-actions" id="edit-actions" style="display: none;">
-                    <button class="save-btn" id="save-btn">保存</button>
-                    <button class="cancel-btn" id="cancel-btn">取消</button>
+                <div class="edit-area" id="edit-area">
+                    <button class="edit-btn" id="edit-btn" title="编辑">编辑</button>
+                    <button class="save-btn" id="save-btn" style="display:none;">保存</button>
+                    <button class="cancel-btn" id="cancel-btn" style="display:none;">取消</button>
                 </div>
 
                 {% if section.next_id %}
@@ -85,6 +96,75 @@
         </div>
     </div>
 </article>
+
+<div class="modal-overlay" id="modal-overlay" style="display:none;">
+    <div class="modal-dialog" id="modal-keypoint-form" style="display:none;">
+        <div class="modal-header">
+            <h3 id="modal-title">新增考点</h3>
+            <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>考点名称</label>
+                <input type="text" id="kp-point-text" class="form-input" placeholder="输入考点名称...">
+            </div>
+            <div class="form-group">
+                <label>详细说明</label>
+                <textarea id="kp-detail" class="form-textarea" rows="4" placeholder="输入详细说明..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>重要程度</label>
+                <select id="kp-importance" class="form-select">
+                    <option value="1">★ 了解</option>
+                    <option value="2">★★ 熟悉</option>
+                    <option value="3" selected>★★★ 掌握</option>
+                    <option value="4">★★★★ 重点</option>
+                    <option value="5">★★★★★ 核心</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" id="modal-cancel">取消</button>
+            <button class="btn-primary" id="modal-save">保存</button>
+        </div>
+    </div>
+
+    <div class="modal-dialog" id="modal-question-form" style="display:none;">
+        <div class="modal-header">
+            <h3 id="modal-q-title">新增习题</h3>
+            <button class="modal-close" id="modal-q-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>题型</label>
+                <select id="q-type" class="form-select">
+                    <option value="choice">选择题</option>
+                    <option value="fill_blank">填空题</option>
+                </select>
+            </div>
+            <div class="form-group" id="q-text-group">
+                <label>题目</label>
+                <textarea id="q-text" class="form-textarea" rows="3" placeholder="输入题目..."></textarea>
+            </div>
+            <div class="form-group" id="q-options-group">
+                <label>选项（JSON格式，如：["A. 选项1", "B. 选项2"]）</label>
+                <textarea id="q-options" class="form-textarea" rows="3" placeholder='["A. ", "B. ", "C. ", "D. "]'></textarea>
+            </div>
+            <div class="form-group">
+                <label>答案</label>
+                <input type="text" id="q-answer" class="form-input" placeholder="选择题填A/B/C/D，填空题多个答案用；分隔">
+            </div>
+            <div class="form-group">
+                <label>解析</label>
+                <textarea id="q-explanation" class="form-textarea" rows="2" placeholder="输入解析..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" id="modal-q-cancel">取消</button>
+            <button class="btn-primary" id="modal-q-save">保存</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}

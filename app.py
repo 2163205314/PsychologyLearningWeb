@@ -2,7 +2,9 @@ from flask import Flask, render_template, jsonify, request, redirect, url_for, s
 from utils import (
     get_all_books, get_book, get_book_by_short_name,
     get_section_tree, get_section, search_sections, update_section,
-    get_study_points, get_exam_questions, get_section_progress, get_books_progress
+    get_study_points, get_exam_questions, get_section_progress, get_books_progress,
+    add_study_point, update_study_point, delete_study_point,
+    add_exam_question, update_exam_question, delete_exam_question
 )
 import os
 
@@ -114,6 +116,93 @@ def api_section_points(section_id):
 def api_section_questions(section_id):
     questions = get_exam_questions(section_id)
     return jsonify(questions)
+
+
+@app.route('/api/point', methods=['POST'])
+def api_add_point():
+    data = request.get_json()
+    if not data or not data.get('section_id') or not data.get('point_text'):
+        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        point_id = add_study_point(
+            data['section_id'],
+            data['point_text'],
+            data.get('detail', ''),
+            data.get('importance', 3)
+        )
+        return jsonify({'success': True, 'id': point_id})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/point/<int:point_id>', methods=['PUT', 'DELETE'])
+def api_point(point_id):
+    if request.method == 'DELETE':
+        try:
+            delete_study_point(point_id)
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    elif request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid request'}), 400
+        try:
+            update_study_point(
+                point_id,
+                point_text=data.get('point_text'),
+                detail=data.get('detail'),
+                importance=data.get('importance')
+            )
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/question', methods=['POST'])
+def api_add_question():
+    data = request.get_json()
+    if not data or not data.get('section_id') or not data.get('question_type') or not data.get('question_text') or not data.get('answer'):
+        return jsonify({'error': 'Missing required fields'}), 400
+    try:
+        qid = add_exam_question(
+            data['section_id'],
+            data['question_type'],
+            data['question_text'],
+            data['answer'],
+            point_id=data.get('point_id'),
+            options=data.get('options'),
+            explanation=data.get('explanation')
+        )
+        return jsonify({'success': True, 'id': qid})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/question/<int:question_id>', methods=['PUT', 'DELETE'])
+def api_question(question_id):
+    if request.method == 'DELETE':
+        try:
+            delete_exam_question(question_id)
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    elif request.method == 'PUT':
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Invalid request'}), 400
+        try:
+            update_exam_question(
+                question_id,
+                question_text=data.get('question_text'),
+                options=data.get('options'),
+                answer=data.get('answer'),
+                explanation=data.get('explanation'),
+                point_id=data.get('point_id')
+            )
+            return jsonify({'success': True})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/book/<int:book_id>/progress')

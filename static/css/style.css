@@ -10,7 +10,9 @@
     --primary-light: #eef1ff;
     --bg: #f8f9fc;
     --bg-white: #ffffff;
+    --bg-secondary: #f1f5f9;
     --text: #2d3748;
+    --text-primary: #2d3748;
     --text-secondary: #718096;
     --text-muted: #a0aec0;
     --border: #e2e8f0;
@@ -793,13 +795,11 @@ body {
 }
 
 .edit-btn {
-    flex: 0 0 auto;
-    padding: 6px 14px;
-    margin-left: 8px;
+    padding: 8px 24px;
     border: 1px solid var(--border);
     border-radius: 6px;
     background: var(--bg);
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text-secondary);
     cursor: pointer;
@@ -1097,15 +1097,16 @@ body {
     display: none;
 }
 
-.edit-actions {
+.edit-area {
     display: flex;
     gap: 12px;
     align-items: center;
+    justify-content: center;
 }
 
-.save-btn,
-.cancel-btn {
-    padding: 8px 20px;
+.edit-area .save-btn,
+.edit-area .cancel-btn {
+    padding: 8px 24px;
     border: 1px solid var(--border);
     border-radius: 6px;
     font-size: 14px;
@@ -1114,23 +1115,23 @@ body {
     transition: var(--transition);
 }
 
-.save-btn {
+.edit-area .save-btn {
     background: var(--primary);
     color: #fff;
     border-color: var(--primary);
 }
 
-.save-btn:hover {
+.edit-area .save-btn:hover {
     background: var(--primary-dark);
     border-color: var(--primary-dark);
 }
 
-.cancel-btn {
+.edit-area .cancel-btn {
     background: var(--bg);
     color: var(--text-secondary);
 }
 
-.cancel-btn:hover {
+.edit-area .cancel-btn:hover {
     border-color: var(--text-muted);
     color: var(--text);
 }
@@ -1624,12 +1625,12 @@ body {
     }
 
     .edit-btn {
-        padding: 4px 10px;
+        padding: 4px 14px;
         font-size: 12px;
     }
 
-    .save-btn,
-    .cancel-btn {
+    .edit-area .save-btn,
+    .edit-area .cancel-btn {
         padding: 6px 14px;
         font-size: 13px;
     }
@@ -1766,8 +1767,316 @@ body {
     .card-footer {
         padding: 10px 12px;
     }
+}
+/* ===== 格式化工具栏 ===== */
+.formatting-toolbar {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    gap: 8px;
+    flex-shrink: 0;
+}
 
-    .content-area {
-        padding: 8px;
-    }
+.toolbar-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.tool-btn {
+    width: 32px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: var(--text-primary);
+    transition: var(--transition);
+}
+
+.tool-btn:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+}
+
+.tool-btn .hl-icon {
+    background: #fef08a;
+    padding: 1px 4px;
+    border-radius: 2px;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.toolbar-divider {
+    width: 1px;
+    height: 20px;
+    background: var(--border);
+    margin: 0 4px;
+}
+
+#tool-add-keypoint,
+#tool-add-question {
+    width: auto;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--primary);
+}
+
+/* ===== 考点编辑模式 ===== */
+.keypoint-item {
+    position: relative;
+}
+
+.keypoint-item .kp-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: #dc2626;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.keypoint-item .kp-delete-btn:hover {
+    background: #fca5a5;
+    color: #991b1b;
+}
+
+.tab-keypoints.editing .keypoint-title[contenteditable="true"],
+.tab-keypoints.editing .keypoint-detail[contenteditable="true"] {
+    outline: 1px dashed var(--primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+    padding: 2px 4px;
+}
+
+.tab-keypoints.editing .keypoint-title[contenteditable="true"]:focus,
+.tab-keypoints.editing .keypoint-detail[contenteditable="true"]:focus {
+    outline: 2px solid var(--primary);
+    background: var(--primary-light);
+}
+
+/* ===== 习题编辑模式 ===== */
+.question-block {
+    position: relative;
+}
+
+.question-block .q-delete-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 50%;
+    background: #fee2e2;
+    color: #dc2626;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.question-block .q-delete-btn:hover {
+    background: #fca5a5;
+    color: #991b1b;
+}
+
+.question-block .q-edit-btn {
+    margin-left: 8px;
+    padding: 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: #fff;
+    color: var(--primary);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.question-block .q-edit-btn:hover {
+    background: var(--primary-light);
+}
+
+/* ===== 模态框 ===== */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10000;
+}
+
+.modal-dialog {
+    background: #fff;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 520px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.modal-close {
+    width: 28px;
+    height: 28px;
+    border: none;
+    background: none;
+    font-size: 22px;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-close:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.form-input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    transition: var(--transition);
+    box-sizing: border-box;
+}
+
+.form-input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.form-textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+    transition: var(--transition);
+    box-sizing: border-box;
+}
+
+.form-textarea:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.form-select {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    outline: none;
+    background: #fff;
+    cursor: pointer;
+    transition: var(--transition);
+    box-sizing: border-box;
+}
+
+.form-select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-light);
+}
+
+.btn-cancel {
+    padding: 8px 20px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-cancel:hover {
+    background: var(--bg-secondary);
+}
+
+.btn-primary {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px;
+    background: var(--primary);
+    color: #fff;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.btn-primary:hover {
+    background: var(--primary-dark);
 }
