@@ -4,18 +4,86 @@ from utils import (
     get_section_tree, get_section, search_sections, update_section,
     get_study_points, get_exam_questions, get_section_progress, get_books_progress,
     add_study_point, update_study_point, delete_study_point,
-    add_exam_question, update_exam_question, delete_exam_question
+    add_exam_question, update_exam_question, delete_exam_question,
+    mark_section_learning_completed, reset_book_learning_progress
 )
 import os
+import re
 
 app = Flask(__name__)
 
 IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'img')
+FONT_DIR = os.path.join(app.static_folder, 'fonts')
+
+
+def normalize_choice_answer(answer_text):
+    return sorted([item.strip().upper() for item in str(answer_text or '').split(',') if item.strip()])
+
+
+def normalize_blank_answer(answer_text):
+    return [item.strip() for item in re.split(r'[；;]', str(answer_text or '')) if item.strip()]
+
+
+def grade_section_answers(questions, submitted_answers):
+    answer_map = {str(item.get('question_id')): item for item in (submitted_answers or []) if item.get('question_id') is not None}
+    results = []
+    all_correct = bool(questions)
+
+    for question in questions:
+        submitted = answer_map.get(str(question['id']), {})
+        is_correct = False
+
+        if question['question_type'] == 'choice':
+            selected_options = submitted.get('selected_options') or []
+            normalized_selected = sorted([str(option).strip().upper() for option in selected_options if str(option).strip()])
+            normalized_answer = normalize_choice_answer(question.get('answer'))
+            is_correct = normalized_selected == normalized_answer
+            results.append({
+                'question_id': question['id'],
+                'is_correct': is_correct,
+                'selected_options': normalized_selected,
+                'correct_answer': normalized_answer,
+                'question_type': question['question_type']
+            })
+        elif question['question_type'] == 'fill_blank':
+            submitted_blanks = submitted.get('blanks') or []
+            normalized_submitted = [str(item).strip() for item in submitted_blanks]
+            normalized_answer = normalize_blank_answer(question.get('answer'))
+            blank_results = []
+            for index, expected in enumerate(normalized_answer):
+                user_value = normalized_submitted[index] if index < len(normalized_submitted) else ''
+                blank_results.append(user_value == expected)
+            is_correct = len(normalized_submitted) == len(normalized_answer) and all(blank_results)
+            results.append({
+                'question_id': question['id'],
+                'is_correct': is_correct,
+                'submitted_blanks': normalized_submitted,
+                'correct_answer': normalized_answer,
+                'blank_results': blank_results,
+                'question_type': question['question_type']
+            })
+        else:
+            is_correct = False
+            results.append({
+                'question_id': question['id'],
+                'is_correct': False,
+                'question_type': question['question_type']
+            })
+
+        if not is_correct:
+            all_correct = False
+
+    return all_correct, results
 
 
 @app.route('/images/<path:filename>')
 def serve_image(filename):
     return send_from_directory(IMG_DIR, filename)
+
+
+@app.route('/static/js/lib/fonts/<path:filename>')
+def serve_katex_font(filename):
+    return send_from_directory(FONT_DIR, filename)
 
 
 @app.route('/')
@@ -205,10 +273,47 @@ def api_question(question_id):
             return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/section/<int:section_id>/submit', methods=['POST'])
+def api_submit_section_answers(section_id):
+    data = request.get_json() or {}
+    answers = data.get('answers') or []
+    questions = get_exam_questions(section_id)
+    if not questions:
+        return jsonify({'error': '当前章节暂无习题，无法提交'}), 400
+
+    all_correct, results = grade_section_answers(questions, answers)
+    section = get_section(section_id)
+    book_id = section['book_id'] if section else None
+
+    progress_updated = False
+    progress = None
+    if all_correct:
+        progress_updated = mark_section_learning_completed(section_id)
+        if book_id is not None:
+            progress = get_section_progress(book_id)
+    elif book_id is not None:
+        progress = get_section_progress(book_id)
+
+    return jsonify({
+        'success': True,
+        'all_correct': all_correct,
+        'results': results,
+        'progress_updated': progress_updated,
+        'progress': progress
+    })
+
+
 @app.route('/api/book/<int:book_id>/progress')
 def api_book_progress(book_id):
     progress = get_section_progress(book_id)
     return jsonify(progress)
+
+
+@app.route('/api/book/<int:book_id>/progress/reset', methods=['POST'])
+def api_reset_book_progress(book_id):
+    reset_book_learning_progress(book_id)
+    progress = get_section_progress(book_id)
+    return jsonify({'success': True, 'progress': progress})
 
 
 @app.route('/api/books/progress')

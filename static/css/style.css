@@ -638,14 +638,12 @@ body {
 .book-card {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    gap: 16px;
     padding: 24px;
     min-height: 0;
     background: var(--bg-white);
     border: 1px solid var(--border);
     border-radius: 12px;
-    text-decoration: none;
     transition: var(--transition);
     box-shadow: var(--shadow);
 }
@@ -654,6 +652,15 @@ body {
     transform: translateY(-4px);
     box-shadow: var(--shadow-md);
     border-color: var(--primary);
+}
+
+.book-card-main {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: inherit;
 }
 
 .book-icon {
@@ -667,10 +674,46 @@ body {
     margin-bottom: 12px;
 }
 
+.book-card-progress {
+    width: 100%;
+    margin-bottom: 12px;
+}
+
+.book-progress-text {
+    display: block;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    text-align: center;
+}
+
 .book-arrow {
     font-size: 14px;
     color: var(--primary);
     font-weight: 500;
+}
+
+.book-reset-btn {
+    align-self: center;
+    padding: 8px 18px;
+    border: 1px solid #ffccc7;
+    border-radius: 6px;
+    background: #fff2f0;
+    color: #cf1322;
+    font-size: 13px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.book-reset-btn:hover {
+    background: #ff4d4f;
+    border-color: #ff4d4f;
+    color: #fff;
+}
+
+.book-reset-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
 }
 
 /* ===== Book Welcome ===== */
@@ -900,6 +943,14 @@ body {
     border-bottom: 1px solid var(--border);
 }
 
+.question-block.question-correct {
+    background: linear-gradient(180deg, rgba(246, 255, 237, 0.9), rgba(246, 255, 237, 0));
+}
+
+.question-block.question-wrong {
+    background: linear-gradient(180deg, rgba(255, 242, 240, 0.9), rgba(255, 242, 240, 0));
+}
+
 .question-block:last-child {
     border-bottom: none;
 }
@@ -1040,27 +1091,6 @@ body {
     color: #cf1322;
 }
 
-.check-answer-btn {
-    margin-top: 10px;
-    padding: 6px 16px;
-    border: 1px solid var(--primary);
-    border-radius: 6px;
-    background: #fff;
-    color: var(--primary);
-    font-size: 13px;
-    cursor: pointer;
-    transition: var(--transition);
-}
-
-.check-answer-btn:hover {
-    background: var(--primary);
-    color: #fff;
-}
-
-.check-answer-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
 
 .progress-indicator {
     text-align: center;
@@ -1104,6 +1134,7 @@ body {
     justify-content: center;
 }
 
+.edit-area .submit-btn,
 .edit-area .save-btn,
 .edit-area .cancel-btn {
     padding: 8px 24px;
@@ -1113,6 +1144,22 @@ body {
     font-weight: 500;
     cursor: pointer;
     transition: var(--transition);
+}
+
+.edit-area .submit-btn {
+    background: #52c41a;
+    color: #fff;
+    border-color: #52c41a;
+}
+
+.edit-area .submit-btn:hover {
+    background: #389e0d;
+    border-color: #389e0d;
+}
+
+.edit-area .submit-btn:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
 }
 
 .edit-area .save-btn {
@@ -1629,6 +1676,7 @@ body {
         font-size: 12px;
     }
 
+    .edit-area .submit-btn,
     .edit-area .save-btn,
     .edit-area .cancel-btn {
         padding: 6px 14px;

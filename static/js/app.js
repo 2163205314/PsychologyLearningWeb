@@ -45,6 +45,7 @@
             .then(function (tree) {
                 var pageUnitLevel = getPageUnitLevel(tree);
                 tocTree.innerHTML = buildTocHtml(tree, sectionId, null, pageUnitLevel);
+                renderMathInContainer(tocTree);
                 initTocTree();
                 expandToActive();
             })
@@ -166,6 +167,7 @@
                                     '<div class="result-snippet">' + escapeHtml(item.snippet) + '</div>' +
                                     '</a>';
                             }).join('');
+                            renderMathInContainer(bookSearchResults);
                             bookSearchResults.classList.add('active');
                         }
                     });
@@ -217,12 +219,14 @@
                 }
 
                 if (editBtn) editBtn.style.display = '';
+                updateExerciseSubmitButton();
             });
         });
     }
 
     var keypointsLoaded = false;
     var exercisesLoaded = false;
+    var currentExerciseQuestions = [];
 
     function loadKeypoints(callback) {
         if (keypointsLoaded) {
@@ -250,15 +254,13 @@
                     for (var s = 0; s < (p.importance || 3); s++) {
                         stars += '\u2605';
                     }
-                    html += '<div class="keypoint-item" data-pid="' + p.id + '">';
+                    html += '<div class="keypoint-item" data-pid="' + p.id + '" data-point-text="' + escapeAttribute(p.point_text || '') + '" data-detail="' + escapeAttribute(p.detail || '') + '">';
                     html += '<div class="keypoint-header">';
                     html += '<span class="keypoint-num">' + (i + 1) + '</span>';
-                    html += '<span class="keypoint-title">' + escapeHtml(p.point_text) + '</span>';
+                    html += '<span class="keypoint-title">' + renderFormattedText(p.point_text || '', 'inline') + '</span>';
                     html += '<span class="keypoint-stars">' + stars + '</span>';
                     html += '</div>';
-                    if (p.detail) {
-                        html += '<div class="keypoint-detail">' + escapeHtml(p.detail) + '</div>';
-                    }
+                    html += '<div class="keypoint-detail">' + renderFormattedText(p.detail || '', 'block') + '</div>';
                     html += '</div>';
                 });
                 html += '</div>';
@@ -287,13 +289,15 @@
         fetch('/api/section/' + sectionData.id + '/questions')
             .then(function(r) { return r.json(); })
             .then(function(questions) {
+                currentExerciseQuestions = questions || [];
                 if (questions.length === 0) {
                     container.innerHTML = '<div class="exercises-loading">暂无习题数据</div>';
+                    updateExerciseSubmitButton();
                     return;
                 }
                 var html = '<div class="exercises-list">';
                 questions.forEach(function(q, i) {
-                    html += '<div class="question-block" data-qid="' + q.id + '">';
+                    html += '<div class="question-block" data-qid="' + q.id + '" data-question-type="' + escapeAttribute(q.question_type || '') + '" data-is-multi="' + (isMultipleChoiceQuestion(q) ? '1' : '0') + '">';
                     if (q.question_type === 'choice') {
                         html += renderChoiceQuestion(q, i + 1);
                     } else if (q.question_type === 'fill_blank') {
@@ -305,6 +309,7 @@
                 container.innerHTML = html;
                 exercisesLoaded = true;
                 bindExerciseEvents();
+                updateExerciseSubmitButton();
                 if (callback) callback();
             })
             .catch(function() {
@@ -312,45 +317,117 @@
             });
     }
 
-    function renderChoiceQuestion(q, num) {
-        var html = '';
-        html += '<div class="question-stem"><span class="question-num">' + num + '.</span>' + escapeHtml(q.question_text) + '</div>';
-        if (q.options) {
-            try {
-                var options = JSON.parse(q.options);
-                html += '<div class="question-options">';
-                var labels = ['A', 'B', 'C', 'D'];
-                options.forEach(function(opt, oi) {
-                    html += '<div class="option-item" data-answer="' + labels[oi] + '">';
-                    html += '<span class="option-label">' + labels[oi] + '</span>';
-                    html += '<span>' + escapeHtml(opt.substring(2).trim()) + '</span>';
-                    html += '</div>';
-                });
-                html += '</div>';
-            } catch(e) {}
+    function parseQuestionOptions(optionsValue) {
+        if (!optionsValue) return [];
+        if (Array.isArray(optionsValue)) return optionsValue;
+
+        try {
+            var parsed = JSON.parse(optionsValue);
+            if (Array.isArray(parsed)) {
+                return parsed;
+            }
+        } catch (e) {}
+
+        return String(optionsValue).split(/\r?\n/).map(function(line) {
+            return line.trim();
+        }).filter(Boolean);
+    }
+
+    function formatQuestionOptionsForEditor(optionsValue) {
+        return parseQuestionOptions(optionsValue).join('\n');
+    }
+
+    function normalizeQuestionOptionsForSave(questionType, rawValue) {
+        if (questionType !== 'choice') return null;
+        var options = parseQuestionOptions(rawValue);
+        if (!options.length) return null;
+
+        var labels = ['A', 'B', 'C', 'D', 'E', 'F'];
+        var normalized = options.map(function(option, index) {
+            var cleaned = String(option).trim().replace(/^[A-Fa-f][\.、)）\s]+/, '').trim();
+            return labels[index] + '. ' + cleaned;
+        });
+        return JSON.stringify(normalized);
+    }
+
+    function stripOptionLabel(option, fallbackLabel) {
+        var raw = String(option || '').trim();
+        var matched = raw.match(/^([A-Fa-f])[\.、)）\s]+([\s\S]*)$/);
+        if (matched) {
+            return {
+                label: matched[1].toUpperCase(),
+                content: matched[2].trim()
+            };
         }
-        html += '<div class="answer-reveal" id="answer-' + q.id + '">';
-        html += '<strong>正确答案：' + escapeHtml(q.answer) + '</strong>';
+        return {
+            label: fallbackLabel,
+            content: raw
+        };
+    }
+
+    function renderAnswerReveal(q) {
+        var html = '<div class="answer-reveal" id="answer-' + q.id + '">';
+        html += '<strong>正确答案：</strong><span class="answer-value">' + renderFormattedText(q.answer || '', 'inline') + '</span>';
         if (q.explanation) {
-            html += '<br>' + escapeHtml(q.explanation);
+            html += '<div class="answer-explanation">' + renderFormattedText(q.explanation, 'block') + '</div>';
         }
         html += '</div>';
         return html;
     }
 
+    function isMultipleChoiceQuestion(q) {
+        if (!q) return false;
+        var answer = String(q.answer || '').trim();
+        var stem = String(q.question_text || '');
+        return answer.indexOf(',') !== -1 || stem.indexOf('【多选题】') !== -1;
+    }
+
+    function renderChoiceQuestion(q, num) {
+        var html = '';
+        html += '<div class="question-stem"><span class="question-num">' + num + '.</span><span class="question-stem-content">' + renderFormattedText(q.question_text || '', 'inline') + '</span></div>';
+
+        var options = parseQuestionOptions(q.options);
+        if (options.length) {
+            html += '<div class="question-options">';
+            options.forEach(function(opt, oi) {
+                var fallbackLabel = String.fromCharCode(65 + oi);
+                var optionMeta = stripOptionLabel(opt, fallbackLabel);
+                html += '<div class="option-item" data-answer="' + optionMeta.label + '">';
+                html += '<span class="option-label">' + optionMeta.label + '</span>';
+                html += '<span class="option-content">' + renderFormattedText(optionMeta.content, 'inline') + '</span>';
+                html += '</div>';
+            });
+            html += '</div>';
+        }
+
+        html += renderAnswerReveal(q);
+        return html;
+    }
+
     function renderFillBlankQuestion(q, num) {
         var html = '';
-        var stem = q.question_text;
-        stem = stem.replace(/_{4,}/g, '<input type="text" class="fill-blank-input" data-answer-id="' + q.id + '" placeholder="?">');
-        html += '<div class="question-stem"><span class="question-num">' + num + '.</span>' + stem + '</div>';
-        html += '<button class="check-answer-btn" data-answer-id="' + q.id + '">检查答案</button>';
-        html += '<div class="answer-reveal" id="answer-' + q.id + '">';
-        html += '<strong>正确答案：' + escapeHtml(q.answer) + '</strong>';
-        if (q.explanation) {
-            html += '<br>' + escapeHtml(q.explanation);
-        }
-        html += '</div>';
+        var placeholder = '@@BLANK_' + q.id + '@@';
+        var stemSource = (q.question_text || '').replace(/_{4,}/g, placeholder);
+        var stemHtml = renderFormattedText(stemSource, 'inline').split(placeholder).join('<input type="text" class="fill-blank-input" data-answer-id="' + q.id + '" placeholder="?">');
+        html += '<div class="question-stem"><span class="question-num">' + num + '.</span><span class="question-stem-content">' + stemHtml + '</span></div>';
+        html += renderAnswerReveal(q);
         return html;
+    }
+
+    function resetQuestionFeedback(block) {
+        if (!block) return;
+        block.classList.remove('question-correct');
+        block.classList.remove('question-wrong');
+        block.querySelectorAll('.option-item').forEach(function(item) {
+            item.classList.remove('correct');
+            item.classList.remove('wrong');
+        });
+        block.querySelectorAll('.fill-blank-input').forEach(function(input) {
+            input.classList.remove('correct');
+            input.classList.remove('wrong');
+        });
+        var answerReveal = block.querySelector('.answer-reveal');
+        if (answerReveal) answerReveal.classList.remove('show');
     }
 
     function bindExerciseEvents() {
@@ -360,93 +437,298 @@
                 if (isEditMode) return;
                 var block = this.closest('.question-block');
                 if (!block) return;
-                var qid = block.getAttribute('data-qid');
-                var allItems = block.querySelectorAll('.option-item');
-                var selected = this.getAttribute('data-answer');
-                var answerReveal = document.getElementById('answer-' + qid);
 
-                var alreadyAnswered = false;
-                allItems.forEach(function(it) {
-                    if (it.classList.contains('correct') || it.classList.contains('wrong')) {
-                        alreadyAnswered = true;
-                    }
-                });
-                if (alreadyAnswered) return;
+                resetQuestionFeedback(block);
 
-                allItems.forEach(function(it) { it.classList.remove('selected'); });
-                this.classList.add('selected');
-
-                if (answerReveal) answerReveal.classList.add('show');
-
-                allItems.forEach(function(it) {
-                    var answer = it.getAttribute('data-answer');
-                    it.style.pointerEvents = 'none';
-                    if (answer === selected) {
-                        it.classList.add(answer === selected ? 'selected' : '');
-                    }
-                });
-
-                var correctAnswer = selected;
-                fetch('/api/section/' + window.SECTION_DATA.id + '/questions')
-                    .then(function(r) { return r.json(); })
-                    .then(function(questions) {
-                        var q = questions.find(function(qq) { return qq.id == qid; });
-                        if (q) correctAnswer = q.answer;
-                        allItems.forEach(function(it) {
-                            var answer = it.getAttribute('data-answer');
-                            if (answer === correctAnswer) {
-                                it.classList.add('correct');
-                            } else if (answer === selected && selected !== correctAnswer) {
-                                it.classList.add('wrong');
-                            }
-                        });
+                var isMulti = block.getAttribute('data-is-multi') === '1';
+                if (isMulti) {
+                    this.classList.toggle('selected');
+                } else {
+                    block.querySelectorAll('.option-item').forEach(function(it) {
+                        if (it !== item) it.classList.remove('selected');
                     });
+                    this.classList.toggle('selected');
+                }
             });
         });
 
-        var checkBtns = document.querySelectorAll('.check-answer-btn');
-        checkBtns.forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                if (isEditMode) return;
-                var qid = btn.getAttribute('data-answer-id');
-                var answerReveal = document.getElementById('answer-' + qid);
-                var inputs = document.querySelectorAll('.fill-blank-input[data-answer-id="' + qid + '"]');
-                var block = btn.closest('.question-block');
-
-                fetch('/api/section/' + window.SECTION_DATA.id + '/questions')
-                    .then(function(r) { return r.json(); })
-                    .then(function(questions) {
-                        var q = questions.find(function(qq) { return qq.id == qid; });
-                        if (!q) return;
-
-                        var correctAnswers = (q.answer || '').split(/[；;]/).map(function(item) { return item.trim(); }).filter(Boolean);
-                        var allCorrect = true;
-
-                        inputs.forEach(function(input, idx) {
-                            var userAnswer = input.value.trim();
-                            var expected = correctAnswers[idx] ? correctAnswers[idx].trim() : '';
-                            if (userAnswer === expected) {
-                                input.classList.add('correct');
-                                input.classList.remove('wrong');
-                            } else {
-                                input.classList.add('wrong');
-                                input.classList.remove('correct');
-                                allCorrect = false;
-                            }
-                            input.disabled = true;
-                        });
-
-                        if (answerReveal) answerReveal.classList.add('show');
-                        btn.disabled = true;
-                    });
+        var blankInputs = document.querySelectorAll('.fill-blank-input');
+        blankInputs.forEach(function(input) {
+            input.addEventListener('input', function() {
+                var block = input.closest('.question-block');
+                resetQuestionFeedback(block);
             });
         });
     }
 
+    function collectExerciseAnswers() {
+        var blocks = document.querySelectorAll('.question-block');
+        var answers = [];
+        blocks.forEach(function(block) {
+            var qid = block.getAttribute('data-qid');
+            var questionType = block.getAttribute('data-question-type');
+            if (!qid || !questionType) return;
+
+            if (questionType === 'choice') {
+                var selectedOptions = [];
+                block.querySelectorAll('.option-item.selected').forEach(function(item) {
+                    selectedOptions.push(item.getAttribute('data-answer'));
+                });
+                answers.push({ question_id: parseInt(qid, 10), selected_options: selectedOptions });
+            } else if (questionType === 'fill_blank') {
+                var blanks = [];
+                block.querySelectorAll('.fill-blank-input').forEach(function(input) {
+                    blanks.push((input.value || '').trim());
+                });
+                answers.push({ question_id: parseInt(qid, 10), blanks: blanks });
+            }
+        });
+        return answers;
+    }
+
+    function applyExerciseResults(results) {
+        (results || []).forEach(function(result) {
+            var block = document.querySelector('.question-block[data-qid="' + result.question_id + '"]');
+            if (!block) return;
+
+            resetQuestionFeedback(block);
+            block.classList.add(result.is_correct ? 'question-correct' : 'question-wrong');
+
+            if (result.question_type === 'choice') {
+                var correctAnswers = result.correct_answer || [];
+                var selectedOptions = result.selected_options || [];
+                block.querySelectorAll('.option-item').forEach(function(item) {
+                    var answer = item.getAttribute('data-answer');
+                    if (correctAnswers.indexOf(answer) !== -1) {
+                        item.classList.add('correct');
+                    } else if (selectedOptions.indexOf(answer) !== -1) {
+                        item.classList.add('wrong');
+                    }
+                });
+            } else if (result.question_type === 'fill_blank') {
+                var inputs = block.querySelectorAll('.fill-blank-input');
+                inputs.forEach(function(input, index) {
+                    var isCorrect = result.blank_results && result.blank_results[index];
+                    input.classList.add(isCorrect ? 'correct' : 'wrong');
+                });
+            }
+
+            var answerReveal = block.querySelector('.answer-reveal');
+            if (answerReveal) answerReveal.classList.add('show');
+        });
+    }
+
+    function updateExerciseSubmitButton() {
+        var submitBtn = document.getElementById('submit-btn');
+        if (!submitBtn) return;
+        var activeTab = document.querySelector('.tab-btn.active');
+        var activeKey = activeTab ? activeTab.getAttribute('data-tab') : 'content';
+        var hasQuestions = currentExerciseQuestions && currentExerciseQuestions.length > 0;
+        submitBtn.style.display = (!isEditMode && activeKey === 'exercises' && hasQuestions) ? '' : 'none';
+    }
+
+    function submitExerciseAnswers() {
+        if (isEditMode) return;
+        var sectionData = window.SECTION_DATA;
+        if (!sectionData || !sectionData.id) return;
+        if (!currentExerciseQuestions || currentExerciseQuestions.length === 0) {
+            alert('当前章节暂无习题可提交');
+            return;
+        }
+
+        var submitBtn = document.getElementById('submit-btn');
+        if (submitBtn) submitBtn.disabled = true;
+
+        fetch('/api/section/' + sectionData.id + '/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ answers: collectExerciseAnswers() })
+        })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (!data.success) {
+                    throw new Error(data.error || '提交失败');
+                }
+                applyExerciseResults(data.results || []);
+                if (data.all_correct) {
+                    alert(data.progress_updated ? '本节习题全部答对，学习进度已增加 1。' : '本节习题全部答对，本节学习进度已完成。');
+                } else {
+                    alert('本节习题未全部答对，学习进度不会增加。');
+                }
+            })
+            .catch(function(err) {
+                alert('提交失败: ' + err.message);
+            })
+            .finally(function() {
+                if (submitBtn) submitBtn.disabled = false;
+            });
+    }
+
     function escapeHtml(text) {
         var div = document.createElement('div');
-        div.textContent = text;
+        div.textContent = text == null ? '' : String(text);
         return div.innerHTML;
+    }
+
+    function escapeAttribute(text) {
+        return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function getMathRenderOptions() {
+        return {
+            delimiters: [
+                { left: '$$', right: '$$', display: true },
+                { left: '$', right: '$', display: false },
+                { left: '\\[', right: '\\]', display: true },
+                { left: '\\(', right: '\\)', display: false }
+            ],
+            throwOnError: false,
+            ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+        };
+    }
+
+    function renderMathInContainer(element) {
+        if (!element || typeof renderMathInElement === 'undefined') return;
+        renderMathInElement(element, getMathRenderOptions());
+    }
+
+    function normalizeImageSources(scope) {
+        if (!scope) return;
+        var imgs = scope.querySelectorAll('img');
+        imgs.forEach(function(img) {
+            var src = img.getAttribute('src');
+            if (src && src.indexOf('images/') === 0) {
+                img.setAttribute('src', '/' + src);
+            }
+        });
+    }
+
+    function protectMathExpressions(text) {
+        var source = text || '';
+        var tokens = [];
+        var result = '';
+        var i = 0;
+
+        function pushToken(segment) {
+            var token = '@@MATH_TOKEN_' + tokens.length + '@@';
+            tokens.push(segment);
+            result += token;
+        }
+
+        function findClosingPair(input, startIndex, left, right) {
+            var index = startIndex;
+            while (index < input.length) {
+                var found = input.indexOf(right, index);
+                if (found === -1) return -1;
+                if (input.charAt(found - 1) !== '\\') return found;
+                index = found + right.length;
+            }
+            return -1;
+        }
+
+        function findClosingDollar(input, startIndex) {
+            var index = startIndex;
+            while (index < input.length) {
+                var found = input.indexOf('$', index);
+                if (found === -1) return -1;
+                if (input.charAt(found - 1) !== '\\' && input.charAt(found + 1) !== '$') {
+                    return found;
+                }
+                index = found + 1;
+            }
+            return -1;
+        }
+
+        while (i < source.length) {
+            if (source.slice(i, i + 3) === '```') {
+                var fenceEnd = source.indexOf('```', i + 3);
+                if (fenceEnd === -1) {
+                    result += source.slice(i);
+                    break;
+                }
+                result += source.slice(i, fenceEnd + 3);
+                i = fenceEnd + 3;
+                continue;
+            }
+
+            if (source.charAt(i) === '`') {
+                var codeEnd = source.indexOf('`', i + 1);
+                if (codeEnd === -1) {
+                    result += source.slice(i);
+                    break;
+                }
+                result += source.slice(i, codeEnd + 1);
+                i = codeEnd + 1;
+                continue;
+            }
+
+            if (source.slice(i, i + 2) === '$$') {
+                var displayEnd = findClosingPair(source, i + 2, '$$', '$$');
+                if (displayEnd !== -1) {
+                    pushToken(source.slice(i, displayEnd + 2));
+                    i = displayEnd + 2;
+                    continue;
+                }
+            }
+
+            if (source.slice(i, i + 2) === '\\[') {
+                var bracketEnd = findClosingPair(source, i + 2, '\\[', '\\]');
+                if (bracketEnd !== -1) {
+                    pushToken(source.slice(i, bracketEnd + 2));
+                    i = bracketEnd + 2;
+                    continue;
+                }
+            }
+
+            if (source.slice(i, i + 2) === '\\(') {
+                var parenEnd = findClosingPair(source, i + 2, '\\(', '\\)');
+                if (parenEnd !== -1) {
+                    pushToken(source.slice(i, parenEnd + 2));
+                    i = parenEnd + 2;
+                    continue;
+                }
+            }
+
+            if (source.charAt(i) === '$' && source.charAt(i + 1) !== '$') {
+                var inlineEnd = findClosingDollar(source, i + 1);
+                if (inlineEnd !== -1) {
+                    pushToken(source.slice(i, inlineEnd + 1));
+                    i = inlineEnd + 1;
+                    continue;
+                }
+            }
+
+            result += source.charAt(i);
+            i += 1;
+        }
+
+        return {
+            text: result,
+            tokens: tokens
+        };
+    }
+
+    function restoreMathExpressions(html, tokens) {
+        var restored = html;
+        tokens.forEach(function(tokenValue, index) {
+            var token = '@@MATH_TOKEN_' + index + '@@';
+            restored = restored.split(token).join(tokenValue);
+        });
+        return restored;
+    }
+
+    function renderFormattedText(source, mode) {
+        var protectedMath = protectMathExpressions(source || '');
+        var html = mode === 'inline'
+            ? marked.parseInline(protectedMath.text)
+            : marked.parse(protectedMath.text);
+        html = restoreMathExpressions(html, protectedMath.tokens);
+
+        var wrapper = document.createElement('div');
+        wrapper.innerHTML = html;
+        normalizeImageSources(wrapper);
+        renderMathInContainer(wrapper);
+        return wrapper.innerHTML;
     }
 
     /* ===== Markdown渲染 + KaTeX ===== */
@@ -454,29 +736,13 @@
         var body = document.getElementById('section-body');
         if (!body) return;
 
-        var raw = body.innerHTML.trim();
-        var html = marked.parse(raw);
-        body.innerHTML = html;
+        var raw = body.getAttribute('data-original-html') || body.textContent || '';
+        body.innerHTML = renderFormattedText(raw.trim(), 'block');
+    }
 
-        var imgs = body.querySelectorAll('img');
-        imgs.forEach(function(img) {
-            var src = img.getAttribute('src');
-            if (src && src.indexOf('images/') === 0) {
-                img.setAttribute('src', '/' + src);
-            }
-        });
-
-        if (typeof renderMathInElement !== 'undefined') {
-            renderMathInElement(body, {
-                delimiters: [
-                    { left: '$$', right: '$$', display: true },
-                    { left: '$', right: '$', display: false },
-                    { left: '\\[', right: '\\]', display: true },
-                    { left: '\\(', right: '\\)', display: false }
-                ],
-                throwOnError: false
-            });
-        }
+    function renderStaticMath() {
+        renderMathInContainer(document.querySelector('.breadcrumb'));
+        renderMathInContainer(document.getElementById('toc-tree'));
     }
 
     /* ===== 搜索高亮 ===== */
@@ -634,6 +900,39 @@
         });
     }
 
+    function initHomeProgressReset() {
+        var resetButtons = document.querySelectorAll('.book-reset-btn');
+        if (!resetButtons.length) return;
+
+        resetButtons.forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                var bookId = btn.getAttribute('data-book-id');
+                var bookTitle = btn.getAttribute('data-book-title') || '当前模块';
+                if (!bookId) return;
+                if (!confirm('确定要将“' + bookTitle + '”的学习进度清零吗？')) return;
+
+                btn.disabled = true;
+                fetch('/api/book/' + bookId + '/progress/reset', {
+                    method: 'POST'
+                })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        if (!data.success) {
+                            throw new Error(data.error || '清零失败');
+                        }
+                        window.location.reload();
+                    })
+                    .catch(function(err) {
+                        btn.disabled = false;
+                        alert('清零失败: ' + err.message);
+                    });
+            });
+        });
+    }
+
     /* ===== 记住上次浏览位置 ===== */
     function saveLastViewedSection() {
         var sectionData = window.SECTION_DATA;
@@ -652,8 +951,10 @@
         initMobileSidebar();
         initTocTree();
         expandToActive();
+        renderStaticMath();
         renderMarkdown();
         initTabs();
+        initHomeProgressReset();
         initEditMode();
         initFormattingToolbar();
         initModal();
@@ -833,12 +1134,19 @@
         var editBtn = document.getElementById('edit-btn');
         var saveBtn = document.getElementById('save-btn');
         var cancelBtn = document.getElementById('cancel-btn');
+        var submitBtn = document.getElementById('submit-btn');
 
         if (!editBtn) return;
 
         editBtn.addEventListener('click', function () {
             enterEditMode();
         });
+
+        if (submitBtn) {
+            submitBtn.addEventListener('click', function () {
+                submitExerciseAnswers();
+            });
+        }
 
         saveBtn.addEventListener('click', function () {
             saveEdit();
@@ -847,15 +1155,35 @@
         cancelBtn.addEventListener('click', function () {
             cancelEdit();
         });
+
+        var contentInput = document.getElementById('content-editor-input');
+        if (contentInput) {
+            contentInput.addEventListener('input', renderContentEditorPreview);
+        }
     }
 
     function getActiveEditContainer() {
         var activeTab = document.querySelector('.tab-content.active');
         if (!activeTab) return null;
-        if (activeTab.id === 'tab-original') return document.getElementById('section-body');
+        if (activeTab.id === 'tab-original') return document.getElementById('content-editor-input') || document.getElementById('section-body');
         if (activeTab.id === 'tab-keypoints') return activeTab;
         if (activeTab.id === 'tab-exercises') return activeTab;
         return null;
+    }
+
+    function getContentEditorElements() {
+        return {
+            body: document.getElementById('section-body'),
+            editor: document.getElementById('content-editor'),
+            input: document.getElementById('content-editor-input'),
+            preview: document.getElementById('content-editor-preview')
+        };
+    }
+
+    function renderContentEditorPreview() {
+        var elements = getContentEditorElements();
+        if (!elements.preview || !elements.input) return;
+        elements.preview.innerHTML = renderFormattedText(elements.input.value || '', 'block');
     }
 
     function enterEditMode() {
@@ -871,17 +1199,22 @@
         var activeTab = document.querySelector('.tab-btn.active');
         editTab = activeTab ? activeTab.getAttribute('data-tab') : 'content';
 
+        savedScrollTop = cardBody ? cardBody.scrollTop : 0;
+
         if (editTab === 'content') {
-            var sectionBody = document.getElementById('section-body');
-            if (!sectionBody) return;
-            savedScrollTop = cardBody ? cardBody.scrollTop : 0;
-            originalHtml = sectionBody.innerHTML;
-            sectionBody.contentEditable = 'true';
-            sectionBody.classList.add('editing');
-            addHeadingToolbars();
+            var contentElements = getContentEditorElements();
+            if (!contentElements.body || !contentElements.editor || !contentElements.input) return;
+
+            originalHtml = contentElements.body.getAttribute('data-original-html') || '';
+            contentElements.input.value = originalHtml;
+            contentElements.body.style.display = 'none';
+            contentElements.editor.style.display = 'grid';
+            renderContentEditorPreview();
             finishEnterEditMode(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
+            requestAnimationFrame(function () {
+                contentElements.input.focus();
+            });
         } else if (editTab === 'keypoints') {
-            savedScrollTop = cardBody ? cardBody.scrollTop : 0;
             if (keypointsLoaded) {
                 doEnterKeypointsEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
             } else {
@@ -890,7 +1223,6 @@
                 });
             }
         } else if (editTab === 'exercises') {
-            savedScrollTop = cardBody ? cardBody.scrollTop : 0;
             if (exercisesLoaded) {
                 doEnterExercisesEdit(editBtn, saveBtn, cancelBtn, toolbar, cardBody, tabBtns);
             } else {
@@ -936,6 +1268,8 @@
             updateToolbarButtons();
         }
 
+        updateExerciseSubmitButton();
+
         if (cardBody) {
             requestAnimationFrame(function () {
                 requestAnimationFrame(function () {
@@ -948,9 +1282,13 @@
     function updateToolbarButtons() {
         var toolAddKeypoint = document.getElementById('tool-add-keypoint');
         var toolAddQuestion = document.getElementById('tool-add-question');
+        var toolInlineMath = document.getElementById('tool-inline-math');
+        var toolBlockMath = document.getElementById('tool-block-math');
 
         if (toolAddKeypoint) toolAddKeypoint.style.display = (editTab === 'keypoints') ? '' : 'none';
         if (toolAddQuestion) toolAddQuestion.style.display = (editTab === 'exercises') ? '' : 'none';
+        if (toolInlineMath) toolInlineMath.style.display = (editTab === 'content') ? '' : 'none';
+        if (toolBlockMath) toolBlockMath.style.display = (editTab === 'content') ? '' : 'none';
     }
 
     function makeKeypointsEditable() {
@@ -961,23 +1299,32 @@
         items.forEach(function (item) {
             var titleEl = item.querySelector('.keypoint-title');
             var detailEl = item.querySelector('.keypoint-detail');
-            var starsEl = item.querySelector('.keypoint-stars');
+            var rawTitle = item.getAttribute('data-point-text') || '';
+            var rawDetail = item.getAttribute('data-detail') || '';
 
-            if (titleEl) titleEl.contentEditable = 'true';
-            if (detailEl) detailEl.contentEditable = 'true';
+            if (titleEl) {
+                titleEl.textContent = rawTitle;
+                titleEl.contentEditable = 'true';
+            }
+            if (detailEl) {
+                detailEl.textContent = rawDetail;
+                detailEl.contentEditable = 'true';
+            }
 
-            var delBtn = document.createElement('button');
-            delBtn.className = 'kp-delete-btn';
-            delBtn.innerHTML = '&times;';
-            delBtn.title = '删除考点';
-            delBtn.addEventListener('click', function () {
-                var pid = item.getAttribute('data-pid');
-                if (pid) {
-                    pendingKeypointDeletes.push(parseInt(pid));
-                    item.style.display = 'none';
-                }
-            });
-            item.appendChild(delBtn);
+            if (!item.querySelector('.kp-delete-btn')) {
+                var delBtn = document.createElement('button');
+                delBtn.className = 'kp-delete-btn';
+                delBtn.innerHTML = '&times;';
+                delBtn.title = '删除考点';
+                delBtn.addEventListener('click', function () {
+                    var pid = item.getAttribute('data-pid');
+                    if (pid) {
+                        pendingKeypointDeletes.push(parseInt(pid, 10));
+                        item.style.display = 'none';
+                    }
+                });
+                item.appendChild(delBtn);
+            }
         });
 
         container.querySelectorAll('.keypoint-stars').forEach(function (stars) {
@@ -1031,17 +1378,17 @@
         if (toolbar) toolbar.style.display = 'none';
 
         if (editTab === 'content') {
-            var sectionBody = document.getElementById('section-body');
-            removeHeadingToolbars();
-            if (sectionBody) {
-                sectionBody.contentEditable = 'false';
-                sectionBody.classList.remove('editing');
-            }
+            var contentElements = getContentEditorElements();
+            if (contentElements.editor) contentElements.editor.style.display = 'none';
+            if (contentElements.body) contentElements.body.style.display = '';
         } else if (editTab === 'keypoints') {
             var kpContainer = document.getElementById('tab-keypoints');
             if (kpContainer) {
                 kpContainer.classList.remove('editing');
                 kpContainer.querySelectorAll('.kp-delete-btn').forEach(function (b) { b.remove(); });
+                kpContainer.querySelectorAll('.keypoint-title, .keypoint-detail').forEach(function (el) {
+                    el.contentEditable = 'false';
+                });
             }
         } else if (editTab === 'exercises') {
             var exContainer = document.getElementById('tab-exercises');
@@ -1055,6 +1402,7 @@
         editBtn.style.display = '';
         saveBtn.style.display = 'none';
         cancelBtn.style.display = 'none';
+        updateExerciseSubmitButton();
 
         if (cardBody) {
             requestAnimationFrame(function () {
@@ -1079,11 +1427,10 @@
     }
 
     function saveContentEdit(sectionData) {
-        var sectionBody = document.getElementById('section-body');
-        if (!sectionBody) return;
+        var contentElements = getContentEditorElements();
+        if (!contentElements.body || !contentElements.input) return;
 
-        removeHeadingToolbars();
-        var markdown = htmlToMarkdown(sectionBody);
+        var markdown = contentElements.input.value;
 
         fetch('/api/section/' + sectionData.id + '/update', {
             method: 'POST',
@@ -1093,17 +1440,14 @@
         .then(function (resp) { return resp.json(); })
         .then(function (data) {
             if (data.success) {
-                sectionBody.setAttribute('data-original-html', markdown);
-                sectionBody.innerHTML = markdown;
+                contentElements.body.setAttribute('data-original-html', markdown);
                 renderMarkdown();
                 exitEditMode();
             } else {
-                addHeadingToolbars();
                 alert('保存失败: ' + (data.error || '未知错误'));
             }
         })
         .catch(function (err) {
-            addHeadingToolbars();
             alert('保存失败: ' + err.message);
         });
     }
@@ -1121,8 +1465,8 @@
 
             var titleEl = item.querySelector('.keypoint-title');
             var detailEl = item.querySelector('.keypoint-detail');
-            var pointText = titleEl ? titleEl.textContent.trim() : '';
-            var detail = detailEl ? detailEl.textContent.trim() : '';
+            var pointText = titleEl ? titleEl.innerText.trim() : '';
+            var detail = detailEl ? detailEl.innerText.trim() : '';
 
             if (pointText) {
                 promises.push(
@@ -1176,8 +1520,10 @@
         if (!confirm('确定要取消编辑吗？未保存的修改将丢失。')) return;
 
         if (editTab === 'content') {
-            var sectionBody = document.getElementById('section-body');
-            if (sectionBody) sectionBody.innerHTML = originalHtml;
+            var contentElements = getContentEditorElements();
+            if (contentElements.input) contentElements.input.value = originalHtml;
+            renderContentEditorPreview();
+            renderMarkdown();
         } else if (editTab === 'keypoints') {
             var kpContainer = document.getElementById('tab-keypoints');
             if (kpContainer && originalHtml) kpContainer.innerHTML = originalHtml;
@@ -1192,6 +1538,24 @@
         exitEditMode();
     }
 
+    function insertTextAroundSelection(input, prefix, suffix, placeholder) {
+        if (!input) return;
+
+        var start = input.selectionStart || 0;
+        var end = input.selectionEnd || 0;
+        var value = input.value || '';
+        var selected = value.slice(start, end);
+        var inner = selected || (placeholder || '内容');
+        var replacement = prefix + inner + suffix;
+
+        input.value = value.slice(0, start) + replacement + value.slice(end);
+        var cursorStart = start + prefix.length;
+        var cursorEnd = cursorStart + inner.length;
+        input.focus();
+        input.setSelectionRange(cursorStart, cursorEnd);
+        renderContentEditorPreview();
+    }
+
     function initFormattingToolbar() {
         var toolbar = document.getElementById('formatting-toolbar');
         if (!toolbar) return;
@@ -1201,13 +1565,24 @@
             if (!btn) return;
 
             var action = btn.getAttribute('data-action');
+            var contentInput = document.getElementById('content-editor-input');
 
             if (action === 'bold') {
-                document.execCommand('bold', false, null);
+                if (editTab === 'content') {
+                    insertTextAroundSelection(contentInput, '**', '**', '加粗文字');
+                }
             } else if (action === 'highlight') {
-                document.execCommand('hiliteColor', false, '#fef08a');
+                if (editTab === 'content') {
+                    insertTextAroundSelection(contentInput, '<mark>', '</mark>', '高亮文字');
+                }
             } else if (action === 'underline') {
-                document.execCommand('underline', false, null);
+                if (editTab === 'content') {
+                    insertTextAroundSelection(contentInput, '<u>', '</u>', '下划线文字');
+                }
+            } else if (action === 'insert-inline-math') {
+                insertTextAroundSelection(contentInput, '$', '$', 'x^2');
+            } else if (action === 'insert-block-math') {
+                insertTextAroundSelection(contentInput, '$$\n', '\n$$', '\\chi^2 = \\sum \\frac{(f_o-f_e)^2}{f_e}');
             } else if (action === 'add-keypoint') {
                 openKeypointModal();
             } else if (action === 'add-question') {
@@ -1216,10 +1591,10 @@
         });
 
         document.addEventListener('keydown', function (e) {
-            if (!isEditMode) return;
-            if (e.ctrlKey && e.key === 'b') {
+            if (!isEditMode || editTab !== 'content') return;
+            if (e.ctrlKey && e.key.toLowerCase() === 'b') {
                 e.preventDefault();
-                document.execCommand('bold', false, null);
+                insertTextAroundSelection(document.getElementById('content-editor-input'), '**', '**', '加粗文字');
             }
         });
     }
@@ -1368,7 +1743,7 @@
                 document.getElementById('modal-q-title').textContent = '编辑习题';
                 document.getElementById('q-type').value = q.question_type;
                 document.getElementById('q-text').value = q.question_text;
-                document.getElementById('q-options').value = q.options || '';
+                document.getElementById('q-options').value = formatQuestionOptionsForEditor(q.options || '');
                 document.getElementById('q-answer').value = q.answer;
                 document.getElementById('q-explanation').value = q.explanation || '';
                 document.getElementById('q-options-group').style.display = q.question_type === 'choice' ? '' : 'none';
@@ -1396,9 +1771,15 @@
         var options = document.getElementById('q-options').value.trim();
         var answer = document.getElementById('q-answer').value.trim();
         var explanation = document.getElementById('q-explanation').value.trim();
+        var normalizedOptions = normalizeQuestionOptionsForSave(questionType, options);
 
         if (!questionText || !answer) {
             alert('请输入题目和答案');
+            return;
+        }
+
+        if (questionType === 'choice' && !normalizedOptions) {
+            alert('请输入选择题选项，支持每行一个选项');
             return;
         }
 
@@ -1408,7 +1789,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     question_text: questionText,
-                    options: options || null,
+                    options: normalizedOptions,
                     answer: answer,
                     explanation: explanation
                 })
@@ -1437,7 +1818,7 @@
                     section_id: sectionData.id,
                     question_type: questionType,
                     question_text: questionText,
-                    options: options || null,
+                    options: normalizedOptions,
                     answer: answer,
                     explanation: explanation
                 })

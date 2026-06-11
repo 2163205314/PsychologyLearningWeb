@@ -5,6 +5,23 @@ import re
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'psychology_learning.db')
 
 
+def ensure_learning_progress_table():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute('''
+        CREATE TABLE IF NOT EXISTS section_learning_progress (
+            section_id INTEGER PRIMARY KEY,
+            completed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (section_id) REFERENCES sections(id) ON DELETE CASCADE
+        )
+    ''')
+    conn.commit()
+    conn.close()
+
+
+ensure_learning_progress_table()
+
+
 def get_connection():
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -439,39 +456,67 @@ def delete_exam_question(question_id):
     return True
 
 
-def get_section_progress(book_id):
+def get_page_unit_section_ids(book_id):
     conn = get_connection()
     c = conn.cursor()
-    import re as re_module
-    section_pattern = re_module.compile(r'第[一二三四五六七八九十\d]+节')
-
     c.execute('SELECT id, heading_text, heading_level FROM sections WHERE book_id = ? ORDER BY sort_order', (book_id,))
     all_rows = c.fetchall()
 
+    section_pattern = re.compile(r'第[一二三四五六七八九十\d]+节')
     section_level_counts = {}
     for row in all_rows:
         if section_pattern.match(row['heading_text']):
             lvl = row['heading_level']
             section_level_counts[lvl] = section_level_counts.get(lvl, 0) + 1
 
-    if section_level_counts:
-        page_unit_level = max(section_level_counts, key=section_level_counts.get)
-    else:
+    if not section_level_counts:
         conn.close()
+        return []
+
+    page_unit_level = max(section_level_counts, key=section_level_counts.get)
+    section_ids = [row['id'] for row in all_rows if row['heading_level'] == page_unit_level]
+    conn.close()
+    return section_ids
+
+
+def mark_section_learning_completed(section_id):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute('INSERT OR IGNORE INTO section_learning_progress (section_id) VALUES (?)', (section_id,))
+    created = c.rowcount > 0
+    conn.commit()
+    conn.close()
+    return created
+
+
+def reset_book_learning_progress(book_id):
+    section_ids = get_page_unit_section_ids(book_id)
+    if not section_ids:
+        return 0
+
+    conn = get_connection()
+    c = conn.cursor()
+    placeholders = ','.join('?' for _ in section_ids)
+    c.execute('DELETE FROM section_learning_progress WHERE section_id IN (' + placeholders + ')', section_ids)
+    deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    return deleted
+
+
+def get_section_progress(book_id):
+    section_ids = get_page_unit_section_ids(book_id)
+    total_sections = len(section_ids)
+    if total_sections == 0:
         return {'total': 0, 'completed': 0, 'percentage': 0}
 
-    total_sections = 0
-    completed_sections = 0
-
-    for row in all_rows:
-        if row['heading_level'] == page_unit_level:
-            total_sections += 1
-            c.execute('SELECT COUNT(*) as cnt FROM exam_questions WHERE section_id = ?', (row['id'],))
-            cnt = c.fetchone()['cnt']
-            if cnt > 0:
-                completed_sections += 1
-
+    conn = get_connection()
+    c = conn.cursor()
+    placeholders = ','.join('?' for _ in section_ids)
+    c.execute('SELECT COUNT(*) AS cnt FROM section_learning_progress WHERE section_id IN (' + placeholders + ')', section_ids)
+    completed_sections = c.fetchone()['cnt']
     conn.close()
+
     percentage = round(completed_sections / total_sections * 100) if total_sections > 0 else 0
     return {'total': total_sections, 'completed': completed_sections, 'percentage': percentage}
 

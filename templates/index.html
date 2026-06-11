@@ -59,21 +59,30 @@
 
     <div class="books-grid">
         {% for book in books %}
-        <a href="{{ url_for('book_detail', book_id=book.id) }}" class="book-card">
-            <div class="book-icon">
-                {% if book.sort_order == 1 %}
-                <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
-                {% elif book.sort_order == 2 %}
-                <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
-                {% elif book.sort_order == 3 %}
-                <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
-                {% else %}
-                <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
-                {% endif %}
-            </div>
-            <h2>{{ book.title }}</h2>
-            <span class="book-arrow">开始学习 →</span>
-        </a>
+        <div class="book-card" data-book-id="{{ book.id }}">
+            <a href="{{ url_for('book_detail', book_id=book.id) }}" class="book-card-main">
+                <div class="book-icon">
+                    {% if book.sort_order == 1 %}
+                    <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+                    {% elif book.sort_order == 2 %}
+                    <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+                    {% elif book.sort_order == 3 %}
+                    <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
+                    {% else %}
+                    <svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+                    {% endif %}
+                </div>
+                <h2>{{ book.title }}</h2>
+                <div class="book-card-progress">
+                    <div class="nav-progress-bar">
+                        <div class="nav-progress-fill" style="width: {{ book.progress.percentage }}%;"></div>
+                    </div>
+                    <span class="book-progress-text">学习进度 {{ book.progress.percentage }}%（{{ book.progress.completed }}/{{ book.progress.total }}）</span>
+                </div>
+                <span class="book-arrow">开始学习 →</span>
+            </a>
+            <button class="book-reset-btn" data-book-id="{{ book.id }}" data-book-title="{{ book.title }}">清零进度</button>
+        </div>
         {% endfor %}
     </div>
 </div>
