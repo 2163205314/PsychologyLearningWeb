@@ -9,19 +9,35 @@ from utils import (
 )
 import os
 import re
+import sys
 
-app = Flask(__name__)
+BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.abspath(__file__)))
 
-IMG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'img')
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=os.path.join(BASE_DIR, 'static')
+)
+
+IMG_DIR = os.path.join(BASE_DIR, 'data', 'img')
 FONT_DIR = os.path.join(app.static_folder, 'fonts')
 
 
+def normalize_text_value(value):
+    normalized = re.sub(r'\s+', ' ', str(value or '')).strip()
+    return normalized.lower()
+
+
 def normalize_choice_answer(answer_text):
-    return sorted([item.strip().upper() for item in str(answer_text or '').split(',') if item.strip()])
+    return sorted([
+        normalize_text_value(item).upper()
+        for item in re.split(r'[，,；;、\s]+', str(answer_text or ''))
+        if str(item).strip()
+    ])
 
 
 def normalize_blank_answer(answer_text):
-    return [item.strip() for item in re.split(r'[；;]', str(answer_text or '')) if item.strip()]
+    return [normalize_text_value(item) for item in re.split(r'[；;]', str(answer_text or '')) if str(item).strip()]
 
 
 def grade_section_answers(questions, submitted_answers):
@@ -35,7 +51,11 @@ def grade_section_answers(questions, submitted_answers):
 
         if question['question_type'] == 'choice':
             selected_options = submitted.get('selected_options') or []
-            normalized_selected = sorted([str(option).strip().upper() for option in selected_options if str(option).strip()])
+            normalized_selected = sorted([
+                normalize_text_value(option).upper()
+                for option in selected_options
+                if str(option).strip()
+            ])
             normalized_answer = normalize_choice_answer(question.get('answer'))
             is_correct = normalized_selected == normalized_answer
             results.append({
@@ -47,7 +67,7 @@ def grade_section_answers(questions, submitted_answers):
             })
         elif question['question_type'] == 'fill_blank':
             submitted_blanks = submitted.get('blanks') or []
-            normalized_submitted = [str(item).strip() for item in submitted_blanks]
+            normalized_submitted = [normalize_text_value(item) for item in submitted_blanks]
             normalized_answer = normalize_blank_answer(question.get('answer'))
             blank_results = []
             for index, expected in enumerate(normalized_answer):
@@ -74,6 +94,11 @@ def grade_section_answers(questions, submitted_answers):
             all_correct = False
 
     return all_correct, results
+
+
+@app.context_processor
+def inject_startup_info():
+    return {'startup_info': app.config.get('STARTUP_INFO')}
 
 
 @app.route('/images/<path:filename>')
@@ -285,6 +310,10 @@ def api_submit_section_answers(section_id):
     section = get_section(section_id)
     book_id = section['book_id'] if section else None
 
+    correct_count = sum(1 for item in results if item.get('is_correct'))
+    total_count = len(results)
+    incorrect_count = total_count - correct_count
+
     progress_updated = False
     progress = None
     if all_correct:
@@ -298,6 +327,9 @@ def api_submit_section_answers(section_id):
         'success': True,
         'all_correct': all_correct,
         'results': results,
+        'correct_count': correct_count,
+        'incorrect_count': incorrect_count,
+        'total_count': total_count,
         'progress_updated': progress_updated,
         'progress': progress
     })

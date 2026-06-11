@@ -1,8 +1,10 @@
 import sqlite3
 import os
 import re
+import sys
 
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'psychology_learning.db')
+BASE_DIR = getattr(sys, '_MEIPASS', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DB_PATH = os.path.join(BASE_DIR, 'data', 'psychology_learning.db')
 
 
 def ensure_learning_progress_table():

@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block title %}{{ section.heading_text }} - {{ section.book_title }}{% endblock %}
+
+{% block extra_head %}
+<style>
+    .tool-btn-wide {
+        width: auto;
+        padding: 0 10px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+
+    .content-editor {
+        display: none;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        gap: 16px;
+    }
+
+    .content-editor-pane {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .content-editor-label {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .content-editor-input {
+        width: 100%;
+        min-height: 420px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        outline: none;
+        resize: vertical;
+        font: 13px/1.7 "SF Mono", "Fira Code", "Consolas", monospace;
+        background: #fff;
+    }
+
+    .content-editor-input:focus {
+        border-color: var(--primary);
+        box-shadow: 0 0 0 3px var(--primary-light);
+    }
+
+    .content-editor-preview {
+        min-height: 420px;
+        padding: 14px 16px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: var(--bg);
+        overflow: auto;
+    }
+
+    .question-stem-content p,
+    .option-content p,
+    .answer-value p {
+        display: inline;
+        margin: 0;
+    }
+
+    .answer-explanation {
+        margin-top: 8px;
+    }
+
+    @media (max-width: 900px) {
+        .content-editor {
+            grid-template-columns: 1fr;
+        }
+
+        .content-editor-input,
+        .content-editor-preview {
+            min-height: 280px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block header_search %}
+<div class="header-search">
+    <input type="text" id="book-search" placeholder="在本章中搜索..." data-book-id="{{ section.book_id }}" autocomplete="off">
+    <div id="book-search-results" class="search-dropdown"></div>
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<aside class="sidebar" id="toc-sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-header-top">
+            <a href="{{ url_for('book_detail', book_id=section.book_id) }}" class="back-link">← {{ section.book_title }}</a>
+            <button class="toc-collapse-btn" id="toc-collapse-btn" title="收起导航">
+                <svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M15.41 7.41L14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+            </button>
+        </div>
+        <h2>{{ section.book_title }}</h2>
+    </div>
+    <nav class="toc-tree" id="toc-tree">
+        <div class="toc-loading">加载目录中...</div>
+    </nav>
+</aside>
+{% endblock %}
+
+{% block content %}
+<article class="section-content" data-section-id="{{ section.id }}" data-book-id="{{ section.book_id }}">
+    <div class="section-card">
+        <div class="card-header">
+            <div class="breadcrumb">
+                <div class="breadcrumb-path">
+                    <a href="{{ url_for('index') }}">首页</a>
+                    <span>›</span>
+                    <a href="{{ url_for('book_detail', book_id=section.book_id) }}">{{ section.book_title }}</a>
+                    {% for bc in section.breadcrumbs %}
+                    <span>›</span>
+                    <a href="{{ url_for('section_detail', section_id=bc.id) }}">{{ bc.heading_text }}</a>
+                    {% endfor %}
+                </div>
+                <span class="breadcrumb-title">{{ section.heading_text }}</span>
+            </div>
+            <div class="section-tabs">
+                <button class="tab-btn" data-tab="keypoints">考点</button>
+                <button class="tab-btn" data-tab="exercises">习题</button>
+                <button class="tab-btn active" data-tab="content">原文</button>
+            </div>
+        </div>
+
+        <div class="formatting-toolbar" id="formatting-toolbar" style="display:none;">
+            <div class="toolbar-group">
+                <button class="tool-btn" data-action="bold" title="加粗 (Ctrl+B)"><strong>B</strong></button>
+                <button class="tool-btn" data-action="highlight" title="高亮标记"><span class="hl-icon">H</span></button>
+                <button class="tool-btn" data-action="underline" title="下划线"><u>U</u></button>
+                <button class="tool-btn tool-btn-wide" data-action="insert-inline-math" id="tool-inline-math" title="插入行内公式" style="display:none;">行内公式</button>
+                <button class="tool-btn tool-btn-wide" data-action="insert-block-math" id="tool-block-math" title="插入块公式" style="display:none;">块公式</button>
+                <span class="toolbar-divider"></span>
+                <button class="tool-btn" data-action="add-keypoint" id="tool-add-keypoint" title="新增考点" style="display:none;">+考点</button>
+                <button class="tool-btn" data-action="add-question" id="tool-add-question" title="新增习题" style="display:none;">+习题</button>
+            </div>
+        </div>
+
+        <div class="card-body">
+            <div class="tab-content tab-keypoints" id="tab-keypoints">
+                <div class="keypoints-loading">加载考点中...</div>
+            </div>
+            <div class="tab-content tab-exercises" id="tab-exercises">
+                <div class="exercises-loading">加载习题中...</div>
+            </div>
+            <div class="tab-content tab-original active" id="tab-original">
+                <div class="section-body markdown-body" id="section-body" data-original-html="{{ section.content | e }}">
+{{- section.content | safe -}}
+                </div>
+                <div class="content-editor" id="content-editor">
+                    <div class="content-editor-pane">
+                        <div class="content-editor-label">Markdown / LaTeX</div>
+                        <textarea id="content-editor-input" class="content-editor-input" spellcheck="false"></textarea>
+                    </div>
+                    <div class="content-editor-pane">
+                        <div class="content-editor-label">实时预览</div>
+                        <div id="content-editor-preview" class="content-editor-preview markdown-body"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card-footer">
+            <div class="section-nav">
+                {% if section.prev_id %}
+                <a href="{{ url_for('section_detail', section_id=section.prev_id) }}" class="nav-btn nav-prev">← 上一节</a>
+                {% else %}
+                <span class="nav-btn nav-prev disabled"></span>
+                {% endif %}
+
+                <div class="edit-area" id="edit-area">
+                    <button class="submit-btn" id="submit-btn" style="display:none;">提交</button>
+                    <button class="edit-btn" id="edit-btn" title="编辑">编辑</button>
+                    <button class="save-btn" id="save-btn" style="display:none;">保存</button>
+                    <button class="cancel-btn" id="cancel-btn" style="display:none;">取消</button>
+                </div>
+
+                {% if section.next_id %}
+                <a href="{{ url_for('section_detail', section_id=section.next_id) }}" class="nav-btn nav-next">下一节 →</a>
+                {% else %}
+                <span class="nav-btn nav-next disabled"></span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</article>
+
+<div class="modal-overlay" id="modal-overlay" style="display:none;">
+    <div class="modal-dialog" id="modal-keypoint-form" style="display:none;">
+        <div class="modal-header">
+            <h3 id="modal-title">新增考点</h3>
+            <button class="modal-close" id="modal-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>考点名称</label>
+                <input type="text" id="kp-point-text" class="form-input" placeholder="输入考点名称...">
+            </div>
+            <div class="form-group">
+                <label>详细说明</label>
+                <textarea id="kp-detail" class="form-textarea" rows="4" placeholder="输入详细说明..."></textarea>
+            </div>
+            <div class="form-group">
+                <label>重要程度</label>
+                <select id="kp-importance" class="form-select">
+                    <option value="1">★ 了解</option>
+                    <option value="2">★★ 熟悉</option>
+                    <option value="3" selected>★★★ 掌握</option>
+                    <option value="4">★★★★ 重点</option>
+                    <option value="5">★★★★★ 核心</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" id="modal-cancel">取消</button>
+            <button class="btn-primary" id="modal-save">保存</button>
+        </div>
+    </div>
+
+    <div class="modal-dialog" id="modal-question-form" style="display:none;">
+        <div class="modal-header">
+            <h3 id="modal-q-title">新增习题</h3>
+            <button class="modal-close" id="modal-q-close">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>题型</label>
+                <select id="q-type" class="form-select">
+                    <option value="choice">选择题</option>
+                    <option value="fill_blank">填空题</option>
+                </select>
+            </div>
+            <div class="form-group" id="q-text-group">
+                <label>题目</label>
+                <textarea id="q-text" class="form-textarea" rows="3" placeholder="输入题目..."></textarea>
+            </div>
+            <div class="form-group" id="q-options-group">
+                <label>选项（每行一个，支持公式）</label>
+                <textarea id="q-options" class="form-textarea" rows="4" placeholder="A. 选项1&#10;B. 选项2&#10;C. 选项3&#10;D. 选项4"></textarea>
+            </div>
+            <div class="form-group">
+                <label>答案</label>
+                <input type="text" id="q-answer" class="form-input" placeholder="选择题填A/B/C/D，填空题多个答案用；分隔">
+            </div>
+            <div class="form-group">
+                <label>解析</label>
+                <textarea id="q-explanation" class="form-textarea" rows="2" placeholder="输入解析..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn-cancel" id="modal-q-cancel">取消</button>
+            <button class="btn-primary" id="modal-q-save">保存</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    window.SECTION_DATA = {
+        id: {{ section.id }},
+        bookId: {{ section.book_id }}
+    };
+</script>
+{% endblock %}
